@@ -23,6 +23,8 @@ def seed_database(db: Session):
         seed_phase4_assessments_and_submissions(db)
         from backend.utils.seed_data_structures import seed_data_structures_curriculum
         seed_data_structures_curriculum(db)
+        from backend.utils.seed_coding_bank import seed_expanded_coding_bank
+        seed_expanded_coding_bank(db)
         return
 
     print("[Seed Phase 2] Seeding initial database for Adaptive Learning & AI...")
@@ -950,6 +952,8 @@ def seed_phase4_assessments_and_submissions(db: Session):
         db.add_all(progression_a)
         db.commit()
 
+    from backend.utils.seed_coding_bank import seed_expanded_coding_bank
+    seed_expanded_coding_bank(db)
     print("[Seed Phase 4] Successfully ensured rich student quiz attempts, coding submissions, viva evaluations, and historical knowledge tracing.")
 
 if __name__ == "__main__":

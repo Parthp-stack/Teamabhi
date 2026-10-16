@@ -69,6 +69,13 @@ export const learningService = {
     return response.data;
   },
 
+  // Requirement 7: Multi-attempt assessment history
+  async getStudentAttempts(assessmentId = null) {
+    const params = assessmentId ? { assessment_id: assessmentId } : {};
+    const response = await api.get('/student/attempts', { params });
+    return response.data;
+  },
+
   // Phase 4: Coding Assessment History & Explain Your Code Results
   async getCodingHistory() {
     const response = await api.get('/student/coding-history');

@@ -40,6 +40,8 @@ async def lifespan(app: FastAPI):
         migrate_database()
         from backend.utils.migrate_adaptive import migrate_database as migrate_adaptive
         migrate_adaptive()
+        from backend.utils.migrate_assessments import run_assessment_migrations
+        run_assessment_migrations()
     except Exception as e:
         logger.warning(f"Migration notice: {e}")
     

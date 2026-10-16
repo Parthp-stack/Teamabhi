@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
 import Editor from '@monaco-editor/react';
 import { codingService, sessionService } from '../services/codingService';
@@ -128,6 +128,10 @@ export default function CodingAssessmentPage() {
   const [runResult, setRunResult] = useState(null);
   const [activeTab, setActiveTab] = useState('tests'); // tests or output
 
+  // Requirement 6: Progressive Warning State
+  const [activeWarning, setActiveWarning] = useState(null);
+  const [warningsCount, setWarningsCount] = useState(0);
+
   const editorRef = useRef(null);
   const isPastingRef = useRef(false);
   const hasRunOnceRef = useRef(false);
@@ -141,8 +145,41 @@ export default function CodingAssessmentPage() {
     setLanguage(newLang);
   };
 
-  // Hook for session recording
-  const { recordEvent, flushEvents } = useSessionRecorder(sessionId);
+  // Callback when browser-based integrity detector catches an event
+  const handleIntegrityWarning = useCallback(
+    async (warningData) => {
+      if (!sessionId) return;
+      try {
+        const res = await sessionService.recordWarning(sessionId, {
+          warning_type: warningData.warning_type,
+          message: warningData.message,
+          severity: warningData.severity || 'LOW',
+          evidence: warningData.evidence || {},
+        });
+        const wNum = res.warning_number || 1;
+        setWarningsCount(wNum);
+        let displayMsg = warningData.message;
+        if (wNum === 1) {
+          displayMsg =
+            'Warning: Your assessment environment was interrupted. Please remain in the assessment window. Continued interruptions may be recorded as integrity events.';
+        } else {
+          displayMsg = `Notice (Interruption #${wNum}): Continued environment interruptions or window focus changes recorded. Please focus solely on the assessment tab to ensure accurate integrity scoring.`;
+        }
+        setActiveWarning({
+          message: displayMsg,
+          warning_type: warningData.warning_type,
+          severity: res.severity || 'LOW',
+          warning_number: wNum,
+        });
+      } catch (err) {
+        console.warn('Could not record warning:', err);
+      }
+    },
+    [sessionId]
+  );
+
+  // Hook for session recording with progressive warning listener
+  const { recordEvent, flushEvents } = useSessionRecorder(sessionId, handleIntegrityWarning);
 
   // Initialize assessment session and fetch problem
   useEffect(() => {
@@ -171,19 +208,27 @@ export default function CodingAssessmentPage() {
       });
     }
 
-    // Listen for copy command initiated inside the editor
+    // Listen for keyboard shortcuts (Ctrl+C, Ctrl+V, Cmd+C, Cmd+V)
     editor.onKeyDown((e) => {
-      if ((e.ctrlKey || e.metaKey) && e.code === 'KeyC') {
+      const isCtrlOrMeta = e.ctrlKey || e.metaKey || e.browserEvent?.ctrlKey || e.browserEvent?.metaKey;
+      const isKeyC = e.code === 'KeyC' || e.browserEvent?.key === 'c' || e.browserEvent?.key === 'C';
+      const isKeyV = e.code === 'KeyV' || e.browserEvent?.key === 'v' || e.browserEvent?.key === 'V';
+
+      if (isCtrlOrMeta && isKeyC) {
         const selection = editor.getSelection();
         recordEvent('COPY', {
-          codeLocation: {
+          codeLocation: selection ? {
             start_line: selection.startLineNumber,
             start_column: selection.startColumn,
             end_line: selection.endLineNumber,
             end_column: selection.endColumn,
-          },
+          } : null,
           metadata: { action: 'editor_internal_copy' },
         });
+      }
+
+      if (isCtrlOrMeta && isKeyV) {
+        isPastingRef.current = true;
       }
     });
 
@@ -292,176 +337,312 @@ export default function CodingAssessmentPage() {
   };
 
   return (
-    <div style={{ display: 'flex', height: 'calc(100vh - 100px)', gap: '16px' }}>
-      {/* Left Column: Problem Statement & Visible Test Cases */}
-      <div
-        style={{
-          width: '42%',
-          backgroundColor: '#ffffff',
-          borderRadius: '14px',
-          border: '1px solid #e2e8f0',
-          display: 'flex',
-          flexDirection: 'column',
-          overflow: 'hidden',
-        }}
-      >
-        <div style={{ padding: '20px 24px', borderBottom: '1px solid #e5e7eb', backgroundColor: '#f8fafc' }}>
-          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '6px' }}>
-            <span
-              style={{
-                fontSize: '11px',
-                fontWeight: 700,
-                color: '#4f46e5',
-                textTransform: 'uppercase',
-                letterSpacing: '0.05em',
-              }}
-            >
-              Problem Specification
-            </span>
-            <span
-              style={{
-                fontSize: '11px',
-                fontWeight: 700,
-                backgroundColor: problem?.difficulty === 'EASY' ? '#ecfdf5' : '#eff6ff',
-                color: problem?.difficulty === 'EASY' ? '#059669' : '#2563eb',
-                padding: '2px 8px',
-                borderRadius: '4px',
-              }}
-            >
-              {problem?.difficulty}
-            </span>
+    <div style={{ display: 'flex', flexDirection: 'column', height: 'calc(100vh - 100px)', gap: '12px' }}>
+      {/* Requirement 6: Progressive Assessment Warning Banner */}
+      {activeWarning && (
+        <div
+          style={{
+            backgroundColor: activeWarning.warning_number === 1 ? '#fffbeb' : '#fef2f2',
+            border: `1px solid ${activeWarning.warning_number === 1 ? '#f59e0b' : '#ef4444'}`,
+            borderRadius: '8px',
+            padding: '10px 16px',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'space-between',
+            color: activeWarning.warning_number === 1 ? '#92400e' : '#991b1b',
+            fontSize: '13px',
+            fontWeight: 600,
+            boxShadow: '0 2px 4px rgba(0,0,0,0.05)',
+          }}
+        >
+          <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+            <AlertTriangle size={18} color={activeWarning.warning_number === 1 ? '#f59e0b' : '#ef4444'} />
+            <span>{activeWarning.message}</span>
           </div>
-          <h2 style={{ fontSize: '18px', fontWeight: 800, color: '#0f172a', margin: 0 }}>
-            {problem?.title || 'Loading problem...'}
-          </h2>
+          <button
+            onClick={() => setActiveWarning(null)}
+            style={{
+              backgroundColor: 'transparent',
+              border: 'none',
+              cursor: 'pointer',
+              fontWeight: 700,
+              color: 'inherit',
+              padding: '2px 8px',
+            }}
+          >
+            Dismiss
+          </button>
         </div>
+      )}
 
-        <div style={{ padding: '24px', overflowY: 'auto', flex: 1 }}>
-          <div style={{ whiteSpace: 'pre-wrap', fontSize: '14px', color: '#334155', lineHeight: '1.6' }}>
-            {problem?.description}
-          </div>
-
-          {/* Visible Test Cases */}
-          <div style={{ marginTop: '24px' }}>
-            <h4 style={{ fontSize: '13px', fontWeight: 700, color: '#475569', textTransform: 'uppercase', marginBottom: '10px' }}>
-              Sample Visible Test Cases
-            </h4>
-            {problem?.visible_test_cases?.map((tc, idx) => (
-              <div
-                key={tc.id}
+      <div style={{ display: 'flex', flex: 1, gap: '16px', overflow: 'hidden' }}>
+        {/* Left Column: Problem Statement & Visible Test Cases */}
+        <div
+          style={{
+            width: '42%',
+            backgroundColor: '#ffffff',
+            borderRadius: '14px',
+            border: '1px solid #e2e8f0',
+            display: 'flex',
+            flexDirection: 'column',
+            overflow: 'hidden',
+          }}
+        >
+          <div style={{ padding: '20px 24px', borderBottom: '1px solid #e5e7eb', backgroundColor: '#f8fafc' }}>
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '6px' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                <span
+                  style={{
+                    fontSize: '11px',
+                    fontWeight: 700,
+                    color: '#4f46e5',
+                    textTransform: 'uppercase',
+                    letterSpacing: '0.05em',
+                  }}
+                >
+                  Problem Specification
+                </span>
+                {problem?.topic && (
+                  <span
+                    style={{
+                      fontSize: '10px',
+                      fontWeight: 700,
+                      backgroundColor: '#f1f5f9',
+                      color: '#475569',
+                      padding: '2px 6px',
+                      borderRadius: '4px',
+                      textTransform: 'uppercase',
+                    }}
+                  >
+                    {problem.topic}
+                  </span>
+                )}
+              </div>
+              <span
                 style={{
-                  backgroundColor: '#f8fafc',
-                  border: '1px solid #e2e8f0',
-                  borderRadius: '8px',
-                  padding: '12px',
-                  marginBottom: '10px',
-                  fontSize: '12px',
-                  fontFamily: 'monospace',
+                  fontSize: '11px',
+                  fontWeight: 700,
+                  backgroundColor: problem?.difficulty === 'EASY' ? '#ecfdf5' : problem?.difficulty === 'HARD' ? '#fef2f2' : '#eff6ff',
+                  color: problem?.difficulty === 'EASY' ? '#059669' : problem?.difficulty === 'HARD' ? '#dc2626' : '#2563eb',
+                  padding: '2px 8px',
+                  borderRadius: '4px',
                 }}
               >
-                <div style={{ color: '#64748b', fontWeight: 600, marginBottom: '4px' }}>Input:</div>
-                <div style={{ backgroundColor: '#ffffff', padding: '6px 8px', borderRadius: '4px', border: '1px solid #e2e8f0', marginBottom: '8px' }}>
-                  {tc.input}
+                {problem?.difficulty}
+              </span>
+            </div>
+            <h2 style={{ fontSize: '18px', fontWeight: 800, color: '#0f172a', margin: 0 }}>
+              {problem?.title || 'Loading problem...'}
+            </h2>
+            {problem?.expected_solution_concept && (
+              <div style={{ fontSize: '11px', color: '#64748b', marginTop: '4px' }}>
+                Core Concept: <strong>{problem.expected_solution_concept}</strong>
+              </div>
+            )}
+          </div>
+
+          <div style={{ padding: '24px', overflowY: 'auto', flex: 1 }}>
+            <div style={{ whiteSpace: 'pre-wrap', fontSize: '14px', color: '#334155', lineHeight: '1.6', marginBottom: '16px' }}>
+              {problem?.problem_statement || problem?.description}
+            </div>
+
+            {/* Input & Output Format */}
+            {problem?.input_format && (
+              <div style={{ marginBottom: '16px' }}>
+                <div style={{ fontSize: '12px', fontWeight: 700, color: '#475569', textTransform: 'uppercase', marginBottom: '4px' }}>
+                  Input Format
                 </div>
-                <div style={{ color: '#64748b', fontWeight: 600, marginBottom: '4px' }}>Expected Output:</div>
-                <div style={{ backgroundColor: '#ffffff', padding: '6px 8px', borderRadius: '4px', border: '1px solid #e2e8f0' }}>
-                  {tc.expected_output}
+                <div style={{ fontSize: '13px', color: '#334155', backgroundColor: '#f8fafc', padding: '8px 12px', borderRadius: '6px', border: '1px solid #e2e8f0', whiteSpace: 'pre-wrap' }}>
+                  {problem.input_format}
                 </div>
               </div>
-            ))}
-            <div style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '11px', color: '#94a3b8', marginTop: '12px' }}>
-              <ShieldCheck size={14} color="#10b981" />
-              <span>Hidden validation test cases will execute upon final submission.</span>
+            )}
+
+            {problem?.output_format && (
+              <div style={{ marginBottom: '16px' }}>
+                <div style={{ fontSize: '12px', fontWeight: 700, color: '#475569', textTransform: 'uppercase', marginBottom: '4px' }}>
+                  Output Format
+                </div>
+                <div style={{ fontSize: '13px', color: '#334155', backgroundColor: '#f8fafc', padding: '8px 12px', borderRadius: '6px', border: '1px solid #e2e8f0', whiteSpace: 'pre-wrap' }}>
+                  {problem.output_format}
+                </div>
+              </div>
+            )}
+
+            {/* Constraints */}
+            {problem?.constraints && (
+              <div style={{ marginBottom: '16px' }}>
+                <div style={{ fontSize: '12px', fontWeight: 700, color: '#475569', textTransform: 'uppercase', marginBottom: '4px' }}>
+                  Constraints
+                </div>
+                <div style={{ fontSize: '12px', color: '#64748b', backgroundColor: '#f8fafc', padding: '8px 12px', borderRadius: '6px', border: '1px solid #e2e8f0', fontFamily: 'monospace', whiteSpace: 'pre-wrap' }}>
+                  {problem.constraints}
+                </div>
+              </div>
+            )}
+
+            {/* Examples */}
+            {problem?.examples && problem.examples.length > 0 && (
+              <div style={{ marginBottom: '20px' }}>
+                <h4 style={{ fontSize: '13px', fontWeight: 700, color: '#475569', textTransform: 'uppercase', marginBottom: '10px' }}>
+                  Examples
+                </h4>
+                {problem.examples.map((ex, i) => (
+                  <div key={i} style={{ backgroundColor: '#f8fafc', border: '1px solid #e2e8f0', borderRadius: '8px', padding: '12px', marginBottom: '10px', fontSize: '12px' }}>
+                    <div style={{ fontWeight: 600, color: '#64748b', marginBottom: '4px' }}>Input:</div>
+                    <pre style={{ margin: '0 0 8px 0', backgroundColor: '#ffffff', padding: '6px 8px', borderRadius: '4px', border: '1px solid #e2e8f0', fontFamily: 'monospace' }}>{ex.input}</pre>
+                    <div style={{ fontWeight: 600, color: '#64748b', marginBottom: '4px' }}>Output:</div>
+                    <pre style={{ margin: '0 0 8px 0', backgroundColor: '#ffffff', padding: '6px 8px', borderRadius: '4px', border: '1px solid #e2e8f0', fontFamily: 'monospace' }}>{ex.output}</pre>
+                    {ex.explanation && (
+                      <div style={{ color: '#475569', fontStyle: 'italic', fontSize: '11px' }}>
+                        Explanation: {ex.explanation}
+                      </div>
+                    )}
+                  </div>
+                ))}
+              </div>
+            )}
+
+            {/* Visible Test Cases */}
+            <div style={{ marginTop: '20px' }}>
+              <h4 style={{ fontSize: '13px', fontWeight: 700, color: '#475569', textTransform: 'uppercase', marginBottom: '10px' }}>
+                Sample Visible Test Cases
+              </h4>
+              {problem?.visible_test_cases?.map((tc, idx) => (
+                <div
+                  key={tc.id}
+                  style={{
+                    backgroundColor: '#f8fafc',
+                    border: '1px solid #e2e8f0',
+                    borderRadius: '8px',
+                    padding: '12px',
+                    marginBottom: '10px',
+                    fontSize: '12px',
+                    fontFamily: 'monospace',
+                  }}
+                >
+                  <div style={{ color: '#64748b', fontWeight: 600, marginBottom: '4px' }}>Input:</div>
+                  <div style={{ backgroundColor: '#ffffff', padding: '6px 8px', borderRadius: '4px', border: '1px solid #e2e8f0', marginBottom: '8px' }}>
+                    {tc.input}
+                  </div>
+                  <div style={{ color: '#64748b', fontWeight: 600, marginBottom: '4px' }}>Expected Output:</div>
+                  <div style={{ backgroundColor: '#ffffff', padding: '6px 8px', borderRadius: '4px', border: '1px solid #e2e8f0' }}>
+                    {tc.expected_output}
+                  </div>
+                </div>
+              ))}
+              <div style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '11px', color: '#94a3b8', marginTop: '12px' }}>
+                <ShieldCheck size={14} color="#10b981" />
+                <span>Hidden validation test cases will execute upon final submission.</span>
+              </div>
             </div>
           </div>
         </div>
-      </div>
 
-      {/* Right Column: Editor & Sandbox Runner */}
-      <div
-        style={{
-          flex: 1,
-          display: 'flex',
-          flexDirection: 'column',
-          backgroundColor: '#ffffff',
-          borderRadius: '14px',
-          border: '1px solid #e2e8f0',
-          overflow: 'hidden',
-        }}
-      >
-        {/* Editor Toolbar */}
+        {/* Right Column: Editor & Sandbox Runner */}
         <div
           style={{
-            padding: '12px 20px',
-            borderBottom: '1px solid #e5e7eb',
+            flex: 1,
             display: 'flex',
-            justifyContent: 'space-between',
-            alignItems: 'center',
-            backgroundColor: '#1e293b',
-            color: '#ffffff',
+            flexDirection: 'column',
+            backgroundColor: '#ffffff',
+            borderRadius: '14px',
+            border: '1px solid #e2e8f0',
+            overflow: 'hidden',
           }}
         >
-          <div style={{ display: 'flex', alignItems: 'center', gap: '14px' }}>
-            <span style={{ fontSize: '13px', fontWeight: 700, color: '#94a3b8' }}>Language:</span>
-            <select
-              value={language}
-              onChange={(e) => handleLanguageChange(e.target.value)}
-              style={{
-                backgroundColor: '#334155',
-                color: '#ffffff',
-                border: '1px solid #475569',
-                borderRadius: '6px',
-                padding: '4px 10px',
-                fontSize: '13px',
-                fontWeight: 600,
-              }}
-            >
-              <option value="python">Python 3.12</option>
-              <option value="cpp">C++ 20 (GCC)</option>
-              <option value="c">C (GCC)</option>
-              <option value="java">Java 21</option>
-              <option value="javascript">JavaScript (Node.js)</option>
-            </select>
-          </div>
+          {/* Editor Toolbar */}
+          <div
+            style={{
+              padding: '12px 20px',
+              borderBottom: '1px solid #e5e7eb',
+              display: 'flex',
+              justifyContent: 'space-between',
+              alignItems: 'center',
+              backgroundColor: '#1e293b',
+              color: '#ffffff',
+            }}
+          >
+            <div style={{ display: 'flex', alignItems: 'center', gap: '14px' }}>
+              <span style={{ fontSize: '13px', fontWeight: 700, color: '#94a3b8' }}>Language:</span>
+              <select
+                value={language}
+                onChange={(e) => handleLanguageChange(e.target.value)}
+                style={{
+                  backgroundColor: '#334155',
+                  color: '#ffffff',
+                  border: '1px solid #475569',
+                  borderRadius: '6px',
+                  padding: '4px 10px',
+                  fontSize: '13px',
+                  fontWeight: 600,
+                }}
+              >
+                <option value="python">Python 3.12</option>
+                <option value="cpp">C++ 20 (GCC)</option>
+                <option value="c">C (GCC)</option>
+                <option value="java">Java 21</option>
+                <option value="javascript">JavaScript (Node.js)</option>
+              </select>
+            </div>
 
-          <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-            <button
-              onClick={handleRun}
-              disabled={running || submitting}
-              style={{
-                display: 'flex',
-                alignItems: 'center',
-                gap: '6px',
-                padding: '8px 16px',
-                backgroundColor: '#3b82f6',
-                color: '#ffffff',
-                border: 'none',
-                borderRadius: '6px',
-                fontWeight: 700,
-                fontSize: '13px',
-                cursor: running ? 'not-allowed' : 'pointer',
-              }}
-            >
-              <Play size={14} /> {running ? 'Executing...' : 'Run Tests'}
-            </button>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+              {warningsCount > 0 && (
+                <div
+                  style={{
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '5px',
+                    padding: '4px 10px',
+                    borderRadius: '6px',
+                    backgroundColor: warningsCount >= 2 ? '#7f1d1d' : '#78350f',
+                    color: warningsCount >= 2 ? '#fecaca' : '#fef3c7',
+                    fontSize: '11px',
+                    fontWeight: 700,
+                  }}
+                >
+                  <AlertTriangle size={12} />
+                  <span>Interruption Events: {warningsCount}</span>
+                </div>
+              )}
 
-            <button
-              onClick={handleSubmit}
-              disabled={submitting || running}
-              style={{
-                display: 'flex',
-                alignItems: 'center',
-                gap: '6px',
-                padding: '8px 18px',
-                backgroundColor: '#10b981',
-                color: '#ffffff',
-                border: 'none',
-                borderRadius: '6px',
-                fontWeight: 700,
-                fontSize: '13px',
-                cursor: submitting ? 'not-allowed' : 'pointer',
-              }}
-            >
+              <button
+                onClick={handleRun}
+                disabled={running || submitting}
+                style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '6px',
+                  padding: '8px 16px',
+                  backgroundColor: '#3b82f6',
+                  color: '#ffffff',
+                  border: 'none',
+                  borderRadius: '6px',
+                  fontWeight: 700,
+                  fontSize: '13px',
+                  cursor: running ? 'not-allowed' : 'pointer',
+                }}
+              >
+                <Play size={14} /> {running ? 'Executing...' : 'Run Tests'}
+              </button>
+
+              <button
+                onClick={handleSubmit}
+                disabled={submitting || running}
+                style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '6px',
+                  padding: '8px 18px',
+                  backgroundColor: '#10b981',
+                  color: '#ffffff',
+                  border: 'none',
+                  borderRadius: '6px',
+                  fontWeight: 700,
+                  fontSize: '13px',
+                  cursor: submitting ? 'not-allowed' : 'pointer',
+                }}
+              >
               <Send size={14} /> {submitting ? 'Submitting...' : 'Submit & Explain Code'}
             </button>
           </div>
@@ -625,5 +806,6 @@ export default function CodingAssessmentPage() {
         </div>
       </div>
     </div>
+  </div>
   );
 }

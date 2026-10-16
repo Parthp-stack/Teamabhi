@@ -6,6 +6,7 @@ import numpy as np
 from backend.config import settings
 from backend.models.session import Session as CodingSession, SessionEvent, CodeRevision
 from backend.models.integrity import IntegritySignal
+from backend.models.assessment_attempt import AssessmentWarning, AssessmentAttempt
 from backend.models.user import User
 
 class IntegrityService:
@@ -116,10 +117,28 @@ class IntegrityService:
             return ("Internal copy", "NORMAL_RHYTHM", "Copy command observed inside editor.")
 
         # 9. Browser visibility & focus changes
-        if norm_type in ["FOCUS", "BLUR", "VISIBILITY_CHANGE", "TAB_SWITCH"]:
-            return ("Application visibility change", "NORMAL_RHYTHM", "Browser focus or visibility change observed.")
+        if norm_type in ["FOCUS", "BLUR", "WINDOW_BLUR", "VISIBILITY_CHANGE", "TAB_SWITCH"]:
+            desc = "Browser focus or visibility change observed."
+            if norm_type in ["TAB_SWITCH", "VISIBILITY_CHANGE"]:
+                desc = "Browser tab visibility altered."
+            elif norm_type in ["BLUR", "WINDOW_BLUR"]:
+                desc = "Window focus moved away from active assessment."
+            return ("Application visibility change", "NORMAL_RHYTHM", desc)
 
-        # 10. Lifecycle
+        # 10. Integrity detection anomalies (Split screen, fullscreen, resize, inactivity)
+        if norm_type == "POSSIBLE_SPLIT_SCREEN":
+            return ("Possible split screen arrangement", "REVIEW_SUGGESTED", "Window width altered to side-by-side split screen proportion.")
+
+        if norm_type == "FULLSCREEN_EXIT":
+            return ("Fullscreen exit", "REVIEW_SUGGESTED", "Assessment environment exited fullscreen mode.")
+
+        if norm_type == "RESIZE_ANOMALY":
+            return ("Window dimension change", "NORMAL_RHYTHM", "Assessment viewport resized.")
+
+        if norm_type == "SUSPICIOUS_INACTIVITY":
+            return ("Suspicious inactivity period", "REVIEW_SUGGESTED", "Prolonged inactivity without typing or editing observed.")
+
+        # 11. Lifecycle
         if norm_type in ["SESSION_START", "SESSION_END"]:
             return ("Session lifecycle", "NORMAL_RHYTHM", f"Assessment {norm_type.lower()}.")
 
@@ -591,3 +610,96 @@ class IntegrityService:
             db.delete(s)
         db.commit()
         return count
+
+    @classmethod
+    def record_warning(
+        cls,
+        db: Session,
+        student_id: int,
+        warning_type: str,
+        message: str,
+        severity: str = "LOW",
+        session_id: Optional[int] = None,
+        assessment_id: Optional[str] = None,
+        attempt_id: Optional[int] = None,
+        evidence: Optional[Dict[str, Any]] = None
+    ) -> Dict[str, Any]:
+        """
+        Record a progressive assessment warning.
+        1st warning: Non-accusatory alert to student.
+        Subsequent warnings: Escalating risk score, recorded for human review.
+        """
+        query = db.query(AssessmentWarning).filter(AssessmentWarning.student_id == student_id)
+        if session_id:
+            query = query.filter(AssessmentWarning.session_id == session_id)
+        elif attempt_id:
+            query = query.filter(AssessmentWarning.attempt_id == attempt_id)
+
+        prev_warnings_count = query.count()
+        warning_number = prev_warnings_count + 1
+
+        # Escalated severity if multiple warnings
+        effective_severity = severity
+        if warning_number >= 3:
+            effective_severity = "HIGH"
+        elif warning_number >= 2 and severity == "LOW":
+            effective_severity = "MEDIUM"
+
+        warning_obj = AssessmentWarning(
+            student_id=student_id,
+            assessment_id=str(assessment_id) if assessment_id else None,
+            attempt_id=attempt_id,
+            session_id=session_id,
+            warning_type=warning_type,
+            warning_number=warning_number,
+            message=message,
+            severity=effective_severity,
+            evidence=evidence,
+            timestamp=datetime.now(timezone.utc)
+        )
+        db.add(warning_obj)
+        db.commit()
+        db.refresh(warning_obj)
+
+        # Update Session / AssessmentAttempt warnings count and risk score
+        risk_score = min(100.0, warning_number * 25.0)
+        risk_level = "NORMAL"
+        if risk_score >= 70.0:
+            risk_level = "HIGH_RISK"
+        elif risk_score >= 40.0:
+            risk_level = "MEDIUM_RISK"
+        elif risk_score > 0.0:
+            risk_level = "LOW_RISK"
+
+        if attempt_id:
+            att = db.query(AssessmentAttempt).filter(AssessmentAttempt.id == attempt_id).first()
+            if att:
+                att.warnings_count = warning_number
+                att.risk_score = risk_score
+                att.risk_level = risk_level
+                db.commit()
+
+        if session_id:
+            if warning_number >= 2 or effective_severity in ["MEDIUM", "HIGH"]:
+                sig = IntegritySignal(
+                    session_id=session_id,
+                    signal_type=warning_type,
+                    severity=effective_severity,
+                    description=f"Evidence for review: Repeated environment interruption ({warning_type}, warning #{warning_number}) - {message}",
+                    timestamp=datetime.now(timezone.utc),
+                    review_status="PENDING"
+                )
+                db.add(sig)
+                db.commit()
+            cls.update_session_review_status(db, session_id)
+
+        return {
+            "warning_id": warning_obj.id,
+            "warning_number": warning_number,
+            "warning_type": warning_type,
+            "severity": effective_severity,
+            "risk_score": risk_score,
+            "risk_level": risk_level,
+            "message": message,
+            "timestamp": warning_obj.timestamp.isoformat()
+        }

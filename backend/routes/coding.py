@@ -39,7 +39,14 @@ def get_coding_problems(db: Session = Depends(get_db)):
             allowed_languages=p.allowed_languages,
             time_limit=p.time_limit,
             memory_limit=p.memory_limit,
-            visible_test_cases=visible
+            visible_test_cases=visible,
+            problem_statement=p.problem_statement or p.description,
+            input_format=p.input_format,
+            output_format=p.output_format,
+            constraints=p.constraints,
+            examples=p.examples,
+            expected_solution_concept=p.expected_solution_concept,
+            topic=p.topic
         ))
     return results
 
@@ -63,7 +70,14 @@ def get_coding_problem(problem_id: int, db: Session = Depends(get_db)):
         allowed_languages=p.allowed_languages,
         time_limit=p.time_limit,
         memory_limit=p.memory_limit,
-        visible_test_cases=visible
+        visible_test_cases=visible,
+        problem_statement=p.problem_statement or p.description,
+        input_format=p.input_format,
+        output_format=p.output_format,
+        constraints=p.constraints,
+        examples=p.examples,
+        expected_solution_concept=p.expected_solution_concept,
+        topic=p.topic
     )
 
 @router.post("/run", response_model=CodeRunResponse)

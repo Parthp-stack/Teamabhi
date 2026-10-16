@@ -1,4 +1,5 @@
 from fastapi import APIRouter, Depends, HTTPException, status
+from pydantic import BaseModel
 from sqlalchemy.orm import Session
 from datetime import datetime, timezone
 from typing import List, Optional
@@ -135,3 +136,41 @@ def get_session_replay(
     if not replay:
         raise HTTPException(status_code=404, detail="Session replay data not found")
     return replay
+
+class WarningPayload(BaseModel):
+    warning_type: str # TAB_SWITCH, WINDOW_BLUR, VISIBILITY_CHANGE, FULLSCREEN_EXIT, RESIZE_ANOMALY, POSSIBLE_SPLIT_SCREEN
+    message: str
+    severity: Optional[str] = "LOW"
+    evidence: Optional[dict] = None
+    attempt_id: Optional[int] = None
+
+@router.post("/{session_id}/warning")
+def record_session_warning(
+    session_id: int,
+    payload: WarningPayload,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    """
+    Records a progressive assessment warning during student assessment.
+    First interruption produces non-accusatory guidance; repeated events escalate risk score.
+    """
+    session = db.query(CodingSession).filter(CodingSession.id == session_id).first()
+    if not session:
+        raise HTTPException(status_code=404, detail="Session not found")
+
+    if current_user.role == UserRole.STUDENT.value and session.student_id != current_user.id:
+        raise HTTPException(status_code=403, detail="Forbidden")
+
+    return IntegrityService.record_warning(
+        db=db,
+        student_id=session.student_id,
+        warning_type=payload.warning_type,
+        message=payload.message,
+        severity=payload.severity or "LOW",
+        session_id=session_id,
+        assessment_id=str(session.assessment_id) if session.assessment_id else None,
+        attempt_id=payload.attempt_id,
+        evidence=payload.evidence
+    )
+

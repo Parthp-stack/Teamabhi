@@ -47,10 +47,19 @@ class Attempt(Base):
     is_correct = Column(Boolean, nullable=False, index=True)
     score = Column(Float, default=1.0, nullable=False)
     time_taken = Column(Float, default=0.0, nullable=False) # seconds
+    
+    # Adaptive assessment attempt metadata
+    assessment_id = Column(Integer, nullable=True, index=True)
+    attempt_number = Column(Integer, default=1, nullable=False)
+    difficulty = Column(String(20), nullable=True)
+    concept_id = Column(Integer, ForeignKey("concepts.id"), nullable=True, index=True)
+    assessment_attempt_id = Column(Integer, ForeignKey("assessment_attempts.id"), nullable=True, index=True)
+
     created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc), index=True)
 
     student = relationship("User")
     question = relationship("Question", back_populates="attempts")
+    concept = relationship("Concept", foreign_keys=[concept_id])
 
     # Compatibility aliases
     @property
@@ -64,3 +73,4 @@ class Attempt(Base):
     @property
     def timestamp(self):
         return self.created_at
+

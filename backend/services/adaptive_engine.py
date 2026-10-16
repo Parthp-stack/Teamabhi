@@ -5,6 +5,7 @@ from backend.models.concept import Concept
 from backend.models.question import Question, Attempt
 from backend.models.mastery import StudentMastery
 from backend.services.mastery_service import MasteryService
+from backend.services.mcq_validation_service import MCQValidationService
 
 PREREQUISITE_THRESHOLD = 65.0  # Mastery score required in prerequisites to unlock dependent concept
 MASTERY_THRESHOLD = 75.0       # Threshold above which a concept is considered mastered
@@ -71,13 +72,16 @@ class AdaptiveEngine:
         student_id: int,
         course_id: Optional[int] = None,
         module_id: Optional[int] = None,
-        concept_id: Optional[int] = None
+        concept_id: Optional[int] = None,
+        assessment_id: Optional[int] = None
     ) -> Dict[str, Any]:
         """
         Selects the next adaptive question based on:
         1. Targeted topic/concept if specified (e.g. Practice Searching, Practice Binary Search)
         2. Student's weakest eligible prerequisite or active weak concept
         3. Prior performance (wrong answer -> retry concept; repeated wrong -> simpler question; fast correct -> higher difficulty)
+        4. Strict MCQ validation (no malformed or ambiguous questions enter active assessment)
+        5. Session history (prevents repeating already attempted questions)
         """
         query = db.query(Concept).order_by(Concept.order_index.asc())
         if concept_id:
@@ -116,9 +120,10 @@ class AdaptiveEngine:
             })
 
         # Check recent attempts to see if student just got a question wrong
-        recent_attempt = db.query(Attempt).filter(
-            Attempt.student_id == student_id
-        ).order_by(Attempt.created_at.desc()).first()
+        recent_attempt_query = db.query(Attempt).filter(Attempt.student_id == student_id)
+        if assessment_id:
+            recent_attempt_query = recent_attempt_query.filter(Attempt.assessment_id == assessment_id)
+        recent_attempt = recent_attempt_query.order_by(Attempt.created_at.desc()).first()
 
         recent_concept_id = recent_attempt.question.concept_id if recent_attempt and recent_attempt.question else None
         recent_wrong = (recent_attempt is not None and not recent_attempt.is_correct)
@@ -163,10 +168,11 @@ class AdaptiveEngine:
 
         consecutive_wrong = sum(1 for a in concept_attempts if not a.is_correct)
         last_att = concept_attempts[0] if concept_attempts else None
+        is_remedial = consecutive_wrong >= 2
 
         # Difficulty calibration:
         # If repeated wrong (>= 2): force EASY and provide remedial focus
-        if consecutive_wrong >= 2:
+        if is_remedial:
             preferred_diff = "EASY"
             reason += " Repeated mistakes detected; providing foundational question with pedagogical guidance."
         elif last_att and last_att.is_correct and last_att.time_taken and last_att.time_taken < 30.0:
@@ -192,25 +198,49 @@ class AdaptiveEngine:
             ).all()
         ]
 
+        # Questions attempted by this student in this specific assessment session
+        session_attempted_ids = set()
+        if assessment_id:
+            session_attempt_rows = db.query(Attempt.question_id).filter(
+                Attempt.student_id == student_id,
+                Attempt.assessment_id == assessment_id
+            ).all()
+            session_attempted_ids = {r[0] for r in session_attempt_rows}
+
         available_questions = db.query(Question).filter(
             Question.concept_id == target_concept.id
         ).all()
 
-        if not available_questions:
+        # REQUIREMENT 1: Filter out any invalid MCQs before making them available
+        valid_questions = [
+            q for q in available_questions
+            if q.question_type != "MCQ" or MCQValidationService.is_mcq_valid(q)
+        ]
+
+        if not valid_questions:
             return {
                 "concept": target_concept.name,
                 "concept_id": target_concept.id,
                 "reason": reason,
                 "question": None,
-                "message": f"No questions available for {target_concept.name}."
+                "message": f"No valid questions currently available for {target_concept.name}."
             }
 
-        # Filtering: unattempted correct + preferred difficulty
-        pool = [q for q in available_questions if q.id not in answered_correct_ids and q.difficulty == preferred_diff]
+        # REQUIREMENT 2: Select next question based on correctness, current difficulty, and avoid repeating questions
+        # 1. Unattempted in this session + preferred difficulty
+        pool = [q for q in valid_questions if q.id not in session_attempted_ids and q.id not in answered_correct_ids and q.difficulty == preferred_diff]
+        # 2. Unattempted in this session + any difficulty
         if not pool:
-            pool = [q for q in available_questions if q.id not in answered_correct_ids]
+            pool = [q for q in valid_questions if q.id not in session_attempted_ids and q.id not in answered_correct_ids]
+        # 3. Any unattempted in this session
         if not pool:
-            pool = [q for q in available_questions if q.difficulty == preferred_diff] or available_questions
+            pool = [q for q in valid_questions if q.id not in session_attempted_ids]
+        # 4. Fallback: question matching preferred difficulty
+        if not pool:
+            pool = [q for q in valid_questions if q.difficulty == preferred_diff]
+        # 5. Last resort fallback to any valid question
+        if not pool:
+            pool = valid_questions
 
         selected_q = pool[0]
 
@@ -222,6 +252,10 @@ class AdaptiveEngine:
             "current_mastery": target_score,
             "status": target_cand["status"],
             "reason": reason,
+            "is_remedial": is_remedial,
+            "consecutive_wrong": consecutive_wrong,
+            "calibrated_difficulty": preferred_diff,
+            "assessment_id": assessment_id,
             "concept_explanation": target_concept.explanation,
             "concept_code_snippet": target_concept.code_snippet,
             "question": {

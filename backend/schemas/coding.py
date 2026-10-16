@@ -1,6 +1,5 @@
 from pydantic import BaseModel
-from typing import List, Optional
-from datetime import datetime
+from typing import List, Optional, Dict, Any
 
 class TestCaseVisible(BaseModel):
     id: int
@@ -19,6 +18,15 @@ class CodingProblemResponse(BaseModel):
     time_limit: float
     memory_limit: int
     visible_test_cases: List[TestCaseVisible] = []
+    
+    # Comprehensive problem definition fields (Requirement 3)
+    problem_statement: Optional[str] = None
+    input_format: Optional[str] = None
+    output_format: Optional[str] = None
+    constraints: Optional[str] = None
+    examples: Optional[List[Dict[str, Any]]] = None
+    expected_solution_concept: Optional[str] = None
+    topic: Optional[str] = None
 
     class Config:
         from_attributes = True

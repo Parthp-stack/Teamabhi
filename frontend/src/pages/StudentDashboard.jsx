@@ -49,6 +49,7 @@ export default function StudentDashboard() {
   const [analyticsData, setAnalyticsData] = useState(null);
   const [quizHistory, setQuizHistory] = useState([]);
   const [codingHistory, setCodingHistory] = useState([]);
+  const [assessmentAttempts, setAssessmentAttempts] = useState([]);
   const [loading, setLoading] = useState(true);
 
   // Filters for history tables
@@ -71,7 +72,7 @@ export default function StudentDashboard() {
     async function loadAllDashboardData() {
       try {
         setLoading(true);
-        const [path, mastery, analytics, quizzes, coding, score, breakdown, evals] = await Promise.all([
+        const [path, mastery, analytics, quizzes, coding, score, breakdown, evals, attempts] = await Promise.all([
           learningService.getLearningPath().catch(() => null),
           learningService.getStudentMastery().catch(() => null),
           learningService.getAnalytics().catch(() => null),
@@ -80,6 +81,7 @@ export default function StudentDashboard() {
           learningService.getAdaptiveScore().catch(() => null),
           learningService.getConceptBreakdown().catch(() => null),
           learningService.getStudentAIEvaluations().catch(() => []),
+          learningService.getStudentAttempts().catch(() => ({ attempts: [] })),
         ]);
 
         setLearningPath(path);
@@ -90,6 +92,7 @@ export default function StudentDashboard() {
         setAdaptiveScoreData(score);
         setConceptBreakdownData(breakdown);
         setAiEvaluations(evals || []);
+        setAssessmentAttempts(attempts?.attempts || []);
 
         if (breakdown?.courses?.length > 0) {
           setSelectedSubjectId(breakdown.courses[0].id);
@@ -1501,10 +1504,92 @@ export default function StudentDashboard() {
       {/* ========================================================================= */}
       {activeTab === 'quizzes' && (
         <div style={{ backgroundColor: '#ffffff', borderRadius: '14px', border: '1px solid #e2e8f0', padding: '24px' }}>
+          {/* Requirement 7: Multi-attempt Assessment Sessions */}
+          {assessmentAttempts.length > 0 && (
+            <div style={{ marginBottom: '28px', backgroundColor: '#f8fafc', borderRadius: '12px', border: '1px solid #e2e8f0', padding: '18px 20px' }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '14px' }}>
+                <h4 style={{ fontSize: '14px', fontWeight: 800, color: '#0f172a', margin: 0, textTransform: 'uppercase', letterSpacing: '0.04em' }}>
+                  Assessment Sessions Overview (Attempt History)
+                </h4>
+                <span style={{ fontSize: '12px', color: '#64748b' }}>
+                  Total Attempts: <strong>{assessmentAttempts.length}</strong>
+                </span>
+              </div>
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(260px, 1fr))', gap: '14px' }}>
+                {assessmentAttempts.map((att) => {
+                  let badgeBg = '#ecfdf5';
+                  let badgeColor = '#059669';
+                  let badgeText = 'Normal';
+                  if (att.risk_level === 'HIGH_RISK') {
+                    badgeBg = '#fef2f2';
+                    badgeColor = '#dc2626';
+                    badgeText = 'High Risk';
+                  } else if (att.risk_level === 'MEDIUM_RISK') {
+                    badgeBg = '#fffbeb';
+                    badgeColor = '#d97706';
+                    badgeText = 'Medium Risk';
+                  } else if (att.risk_level === 'LOW_RISK') {
+                    badgeBg = '#eff6ff';
+                    badgeColor = '#2563eb';
+                    badgeText = 'Low Risk';
+                  }
+
+                  return (
+                    <div
+                      key={att.id}
+                      style={{
+                        backgroundColor: '#ffffff',
+                        border: '1px solid #e2e8f0',
+                        borderRadius: '10px',
+                        padding: '16px',
+                        display: 'flex',
+                        flexDirection: 'column',
+                        justifyContent: 'space-between',
+                        boxShadow: '0 1px 3px rgba(0,0,0,0.04)',
+                      }}
+                    >
+                      <div>
+                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px' }}>
+                          <span style={{ fontSize: '14px', fontWeight: 800, color: '#0f172a' }}>
+                            Attempt {att.attempt_number}
+                          </span>
+                          <span
+                            style={{
+                              fontSize: '11px',
+                              fontWeight: 700,
+                              backgroundColor: badgeBg,
+                              color: badgeColor,
+                              padding: '2px 8px',
+                              borderRadius: '6px',
+                            }}
+                          >
+                            ● {badgeText}
+                          </span>
+                        </div>
+                        <div style={{ fontSize: '20px', fontWeight: 800, color: '#4f46e5', marginBottom: '10px' }}>
+                          Score: {att.score}%
+                        </div>
+                        <div style={{ fontSize: '12px', color: '#64748b', display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                          <div>Questions: <strong>{att.questions_correct} / {att.questions_attempted}</strong> correct</div>
+                          <div>Warnings: <strong>{att.warnings_count}</strong></div>
+                          <div>Integrity Events: <strong>{att.integrity_events_count}</strong></div>
+                        </div>
+                      </div>
+                      <div style={{ marginTop: '12px', paddingTop: '10px', borderTop: '1px solid #f1f5f9', display: 'flex', justifyContent: 'space-between', fontSize: '11px', color: '#94a3b8' }}>
+                        <span>Status: <strong>{att.status}</strong></span>
+                        <span>{att.started_at ? new Date(att.started_at).toLocaleDateString() : ''}</span>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+          )}
+
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px' }}>
             <div>
               <h3 style={{ fontSize: '18px', fontWeight: 800, color: '#0f172a', margin: 0 }}>
-                Quiz Assessment Attempts History
+                Quiz Assessment Questions History
               </h3>
               <p style={{ margin: '4px 0 0 0', fontSize: '13px', color: '#64748b' }}>
                 Review past concept question attempts and pedagogical explanations.

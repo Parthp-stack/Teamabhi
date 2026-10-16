@@ -7,18 +7,25 @@ from backend.models.user import User
 from backend.models.question import Question, Attempt
 from backend.models.concept import Concept
 from backend.models.coding import CodingSubmission, CodingProblem
+from datetime import datetime, timezone
 from backend.models.explanation import ExplanationQuestion, ExplanationAnswer
 from backend.models.mastery import StudentMastery, MasteryHistory
-from backend.utils.security import get_current_user
+from backend.models.session import Session as CodingSession, SessionEvent
+from backend.models.integrity import IntegritySignal
+from backend.utils.security import get_current_user, require_trainer
 from backend.services.adaptive_engine import AdaptiveEngine
 from backend.services.mastery_service import MasteryService
 from backend.services.ai_service import AIService
+from backend.services.mcq_validation_service import MCQValidationService
+from backend.models.assessment_attempt import AssessmentAttempt, AssessmentWarning
 
 router = APIRouter(tags=["Adaptive Learning & Questions"])
 
 class AttemptSubmission(BaseModel):
     selected_answer: str
     time_taken: Optional[float] = 0.0
+    assessment_id: Optional[int] = None
+    attempt_number: Optional[int] = None
 
 class AttemptResultResponse(BaseModel):
     question_id: int
@@ -31,6 +38,35 @@ class AttemptResultResponse(BaseModel):
     concept_id: int
     concept_name: str
     next_recommended_concept: str
+    attempt_number: Optional[int] = 1
+    difficulty: Optional[str] = None
+
+class MCQValidationRequest(BaseModel):
+    question_text: str
+    options: List[str]
+    correct_answer: str
+    explanation: str
+    difficulty: Optional[str] = "MEDIUM"
+    concept: Optional[str] = "General"
+    use_ai: Optional[bool] = True
+
+# 0. POST /api/questions/validate
+@router.post("/questions/validate")
+async def validate_mcq_endpoint(
+    req: MCQValidationRequest,
+    current_user: User = Depends(get_current_user)
+):
+    """
+    Validates an MCQ before making it available in an active assessment.
+    Performs deterministic syntax, schema, uniqueness, and matching checks,
+    followed by AI-assisted ambiguity and correctness analysis.
+    """
+    payload = req.model_dump()
+    if req.use_ai:
+        res = await MCQValidationService.validate_mcq_with_ai(payload)
+    else:
+        res = MCQValidationService.validate_mcq_deterministic(payload)
+    return res
 
 # 1. GET /api/questions/next
 @router.get("/questions/next")
@@ -39,19 +75,21 @@ def get_next_question(
     course_id: Optional[int] = None,
     module_id: Optional[int] = None,
     concept_id: Optional[int] = None,
+    assessment_id: Optional[int] = None,
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db)
 ):
     """
     Selects the next question based on the student's weakest eligible prerequisite,
-    or targeted topic/concept if specified.
+    prior attempt performance, and calibration difficulty. Avoids repeating questions in the current session.
     """
     res = AdaptiveEngine.get_next_question(
         db=db,
         student_id=current_user.id,
         course_id=course_id,
         module_id=module_id,
-        concept_id=concept_id
+        concept_id=concept_id,
+        assessment_id=assessment_id
     )
     if isinstance(res, dict) and "question" in res and isinstance(res["question"], dict):
         res["id"] = res["question"].get("id")
@@ -72,8 +110,8 @@ def submit_question_attempt(
     db: Session = Depends(get_db)
 ):
     """
-    Evaluates student answer, creates an Attempt record with time_taken, updates StudentMastery
-    with time-calibrated Bayesian logic, and returns immediate feedback with next recommendations.
+    Evaluates student answer, creates an Attempt record with time_taken and attempt_number,
+    updates StudentMastery with time-calibrated Bayesian logic, and updates AssessmentAttempt if in a session.
     """
     question = db.query(Question).filter(Question.id == question_id).first()
     if not question:
@@ -91,17 +129,41 @@ def submit_question_attempt(
         if student_ans_clean in accepted:
             is_correct = True
 
-    # Record Attempt with time taken
+    # Compute attempt number
+    prev_count = db.query(Attempt).filter(
+        Attempt.student_id == current_user.id,
+        Attempt.question_id == question.id
+    ).count()
+    attempt_num = submission.attempt_number or (prev_count + 1)
+
+    # Record Attempt with time taken and assessment metadata
     attempt = Attempt(
         student_id=current_user.id,
         question_id=question.id,
         selected_answer=submission.selected_answer,
         is_correct=is_correct,
         score=1.0 if is_correct else 0.0,
-        time_taken=submission.time_taken or 0.0
+        time_taken=submission.time_taken or 0.0,
+        assessment_id=submission.assessment_id,
+        attempt_number=attempt_num,
+        difficulty=question.difficulty,
+        concept_id=question.concept_id
     )
     db.add(attempt)
     db.commit()
+
+    # If associated with an active AssessmentAttempt session, update counters
+    if submission.assessment_id:
+        asst_att = db.query(AssessmentAttempt).filter(
+            AssessmentAttempt.id == submission.assessment_id,
+            AssessmentAttempt.student_id == current_user.id
+        ).first()
+        if asst_att:
+            asst_att.questions_attempted += 1
+            if is_correct:
+                asst_att.questions_correct += 1
+            asst_att.score = round((asst_att.questions_correct / asst_att.questions_attempted * 100), 1)
+            db.commit()
 
     # Update StudentMastery using explainable Bayesian logic with time-based calibration
     mastery_result = MasteryService.update_mastery(
@@ -120,7 +182,8 @@ def submit_question_attempt(
     next_activity = AdaptiveEngine.get_next_question(
         db=db,
         student_id=current_user.id,
-        course_id=concept.module.course_id if concept and concept.module else None
+        course_id=concept.module.course_id if concept and concept.module else None,
+        assessment_id=submission.assessment_id
     )
     next_rec = next_activity.get("concept", concept.name if concept else "Next Concept")
 
@@ -134,7 +197,9 @@ def submit_question_attempt(
         mastery_change=mastery_result["delta"],
         concept_id=question.concept_id,
         concept_name=concept.name if concept else "Concept",
-        next_recommended_concept=next_rec
+        next_recommended_concept=next_rec,
+        attempt_number=attempt_num,
+        difficulty=question.difficulty
     )
 
 # 3. GET /api/student/mastery
@@ -593,4 +658,202 @@ def get_concept_breakdown(
         })
 
     return {"courses": breakdown}
+
+# ==========================================
+# 11. ASSESSMENT ATTEMPTS & TIMELINE (Req 7, 8)
+# ==========================================
+
+class AssessmentStartRequest(BaseModel):
+    assessment_id: str
+    assessment_type: Optional[str] = "ADAPTIVE_QUIZ"
+
+@router.post("/assessments/start")
+def start_assessment_attempt(
+    req: AssessmentStartRequest,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    prev_attempts_count = db.query(AssessmentAttempt).filter(
+        AssessmentAttempt.student_id == current_user.id,
+        AssessmentAttempt.assessment_id == req.assessment_id
+    ).count()
+
+    attempt = AssessmentAttempt(
+        student_id=current_user.id,
+        assessment_id=req.assessment_id,
+        assessment_type=req.assessment_type or "ADAPTIVE_QUIZ",
+        attempt_number=prev_attempts_count + 1,
+        status="IN_PROGRESS",
+        started_at=datetime.now(timezone.utc)
+    )
+    db.add(attempt)
+    db.commit()
+    db.refresh(attempt)
+
+    return {
+        "attempt_id": attempt.id,
+        "assessment_id": attempt.assessment_id,
+        "attempt_number": attempt.attempt_number,
+        "status": attempt.status,
+        "started_at": attempt.started_at.isoformat()
+    }
+
+@router.post("/assessments/{attempt_id}/finish")
+def finish_assessment_attempt(
+    attempt_id: int,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    attempt = db.query(AssessmentAttempt).filter(AssessmentAttempt.id == attempt_id).first()
+    if not attempt:
+        raise HTTPException(status_code=404, detail="Assessment attempt not found")
+    if attempt.student_id != current_user.id and current_user.role != "trainer":
+        raise HTTPException(status_code=403, detail="Forbidden")
+
+    attempt.status = "COMPLETED"
+    attempt.ended_at = datetime.now(timezone.utc)
+    if attempt.questions_attempted > 0:
+        attempt.score = round((attempt.questions_correct / attempt.questions_attempted * 100), 1)
+
+    if attempt.risk_score >= 70.0 or attempt.warnings_count >= 3:
+        attempt.risk_level = "HIGH_RISK"
+    elif attempt.risk_score >= 40.0 or attempt.warnings_count >= 2:
+        attempt.risk_level = "MEDIUM_RISK"
+    elif attempt.warnings_count == 1:
+        attempt.risk_level = "LOW_RISK"
+    else:
+        attempt.risk_level = "NORMAL"
+
+    db.commit()
+    return {
+        "attempt_id": attempt.id,
+        "status": attempt.status,
+        "score": attempt.score,
+        "questions_attempted": attempt.questions_attempted,
+        "questions_correct": attempt.questions_correct,
+        "warnings_count": attempt.warnings_count,
+        "risk_level": attempt.risk_level,
+        "ended_at": attempt.ended_at.isoformat()
+    }
+
+@router.get("/student/attempts")
+def get_student_attempts(
+    assessment_id: Optional[str] = None,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    query = db.query(AssessmentAttempt).filter(AssessmentAttempt.student_id == current_user.id)
+    if assessment_id:
+        query = query.filter(AssessmentAttempt.assessment_id == assessment_id)
+    attempts = query.order_by(AssessmentAttempt.started_at.desc()).all()
+
+    results = []
+    for a in attempts:
+        results.append({
+            "id": a.id,
+            "assessment_id": a.assessment_id,
+            "assessment_type": a.assessment_type,
+            "attempt_number": a.attempt_number,
+            "status": a.status,
+            "score": a.score,
+            "questions_attempted": a.questions_attempted,
+            "questions_correct": a.questions_correct,
+            "coding_submissions_count": a.coding_submissions_count,
+            "warnings_count": a.warnings_count,
+            "integrity_events_count": a.integrity_events_count,
+            "risk_score": a.risk_score,
+            "risk_level": a.risk_level,
+            "started_at": a.started_at.isoformat() if a.started_at else None,
+            "ended_at": a.ended_at.isoformat() if a.ended_at else None
+        })
+    return {"total": len(results), "attempts": results}
+
+@router.get("/trainer/attempts")
+def get_trainer_attempts(
+    student_id: Optional[int] = None,
+    assessment_id: Optional[str] = None,
+    trainer: User = Depends(require_trainer),
+    db: Session = Depends(get_db)
+):
+    query = db.query(AssessmentAttempt)
+    if student_id:
+        query = query.filter(AssessmentAttempt.student_id == student_id)
+    if assessment_id:
+        query = query.filter(AssessmentAttempt.assessment_id == assessment_id)
+    attempts = query.order_by(AssessmentAttempt.started_at.desc()).all()
+
+    results = []
+    for a in attempts:
+        results.append({
+            "id": a.id,
+            "student_id": a.student_id,
+            "student_name": a.student.name if a.student else "Student",
+            "student_email": a.student.email if a.student else "",
+            "assessment_id": a.assessment_id,
+            "assessment_type": a.assessment_type,
+            "attempt_number": a.attempt_number,
+            "status": a.status,
+            "score": a.score,
+            "questions_attempted": a.questions_attempted,
+            "questions_correct": a.questions_correct,
+            "warnings_count": a.warnings_count,
+            "risk_score": a.risk_score,
+            "risk_level": a.risk_level,
+            "started_at": a.started_at.isoformat() if a.started_at else None,
+            "ended_at": a.ended_at.isoformat() if a.ended_at else None
+        })
+    return {"total": len(results), "attempts": results}
+
+@router.get("/trainer/attempts/{attempt_id}/timeline")
+def get_attempt_timeline(
+    attempt_id: int,
+    trainer: User = Depends(require_trainer),
+    db: Session = Depends(get_db)
+):
+    attempt = db.query(AssessmentAttempt).filter(AssessmentAttempt.id == attempt_id).first()
+    if not attempt:
+        raise HTTPException(status_code=404, detail="Attempt not found")
+
+    events_timeline = []
+
+    # 1. Assessment Warnings
+    warnings = db.query(AssessmentWarning).filter(AssessmentWarning.attempt_id == attempt_id).all()
+    for w in warnings:
+        events_timeline.append({
+            "timestamp": w.timestamp.isoformat(),
+            "time_display": w.timestamp.strftime("%H:%M:%S"),
+            "event_type": "WARNING",
+            "label": f"Warning displayed ({w.warning_type})",
+            "category": "INTEGRITY_WARNING",
+            "risk_level": w.severity,
+            "details": w.message
+        })
+
+    # 2. Question Attempts
+    q_attempts = db.query(Attempt).filter(
+        Attempt.student_id == attempt.student_id,
+        Attempt.assessment_id == attempt.id
+    ).all()
+    for qa in q_attempts:
+        events_timeline.append({
+            "timestamp": qa.created_at.isoformat(),
+            "time_display": qa.created_at.strftime("%H:%M:%S"),
+            "event_type": "QUESTION_ATTEMPT",
+            "label": f"Question #{qa.question_id} {'Correct' if qa.is_correct else 'Incorrect'}",
+            "category": "QUIZ",
+            "risk_level": "NORMAL",
+            "details": f"Answer: {qa.selected_answer} ({qa.time_taken:.1f}s)"
+        })
+
+    events_timeline.sort(key=lambda x: x["timestamp"])
+
+    return {
+        "attempt_id": attempt.id,
+        "student_name": attempt.student.name if attempt.student else "Student",
+        "score": attempt.score,
+        "warnings_count": attempt.warnings_count,
+        "risk_level": attempt.risk_level,
+        "timeline": events_timeline
+    }
+
 

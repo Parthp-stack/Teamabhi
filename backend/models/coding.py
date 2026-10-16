@@ -9,13 +9,27 @@ class CodingProblem(Base):
     id = Column(Integer, primary_key=True, index=True)
     title = Column(String(200), nullable=False)
     description = Column(Text, nullable=False)
-    difficulty = Column(String(20), default="MEDIUM", nullable=False)
+    difficulty = Column(String(20), default="MEDIUM", nullable=False) # EASY, MEDIUM, HARD
     allowed_languages = Column(JSON, default=lambda: ["python", "cpp", "c", "java", "javascript"], nullable=False)
     time_limit = Column(Float, default=2.0, nullable=False) # seconds
     memory_limit = Column(Integer, default=128, nullable=False) # MB
 
+    # Comprehensive problem definition fields (Requirement 3)
+    problem_statement = Column(Text, nullable=True)
+    input_format = Column(Text, nullable=True)
+    output_format = Column(Text, nullable=True)
+    constraints = Column(Text, nullable=True)
+    examples = Column(JSON, nullable=True)
+    expected_solution_concept = Column(String(100), nullable=True)
+    topic = Column(String(100), nullable=True)
+
     test_cases = relationship("TestCase", back_populates="problem", cascade="all, delete-orphan")
     submissions = relationship("CodingSubmission", back_populates="problem", cascade="all, delete-orphan")
+
+    @property
+    def full_statement(self) -> str:
+        return self.problem_statement or self.description
+
 
 
 class TestCase(Base):

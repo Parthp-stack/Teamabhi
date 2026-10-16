@@ -17,6 +17,7 @@ from backend.utils.security import require_trainer, get_current_user
 from backend.services.adaptive_engine import AdaptiveEngine
 from backend.services.curriculum_service import CurriculumService
 from backend.services.ai_service import AIService
+from backend.services.mcq_validation_service import MCQValidationService
 from backend.services.github_service import GitHubEvaluationService
 from backend.schemas.curriculum import (
     CourseCreateRequest, CourseUpdateRequest,
@@ -548,6 +549,17 @@ def get_question_bank(
         })
     return {"total": len(results), "questions": results}
 
+@router.post("/questions/validate")
+async def validate_trainer_question(
+    payload: Dict[str, Any],
+    trainer: User = Depends(require_trainer)
+):
+    """
+    Validates MCQ before adding or modifying in question bank.
+    Returns structured validation feedback.
+    """
+    return await MCQValidationService.validate_mcq_with_ai(payload)
+
 @router.post("/questions")
 def create_question(
     req: QuestionCreateRequest,
@@ -557,6 +569,23 @@ def create_question(
     concept = db.query(Concept).filter(Concept.id == req.concept_id).first()
     if not concept:
         raise HTTPException(status_code=404, detail="Concept not found")
+
+    # REQUIREMENT 1: Validate MCQ before allowing it into the question bank
+    if (req.question_type or "").upper() == "MCQ":
+        mcq_payload = {
+            "question_text": req.question_text,
+            "options": req.options,
+            "correct_answer": req.correct_answer,
+            "explanation": req.explanation,
+            "difficulty": req.difficulty,
+            "concept": concept.name
+        }
+        val_res = MCQValidationService.validate_mcq_deterministic(mcq_payload)
+        if not val_res["valid"]:
+            raise HTTPException(
+                status_code=400,
+                detail=f"MCQ Validation Error: {val_res['reason']}"
+            )
 
     question = Question(
         concept_id=req.concept_id,
@@ -587,6 +616,23 @@ def update_question(
     question = db.query(Question).filter(Question.id == question_id).first()
     if not question:
         raise HTTPException(status_code=404, detail="Question not found")
+
+    q_type = req.question_type if req.question_type is not None else question.question_type
+    if (q_type or "").upper() == "MCQ":
+        mcq_payload = {
+            "question_text": req.question_text if req.question_text is not None else question.question_text,
+            "options": req.options if req.options is not None else question.options,
+            "correct_answer": req.correct_answer if req.correct_answer is not None else question.correct_answer,
+            "explanation": req.explanation if req.explanation is not None else question.explanation,
+            "difficulty": req.difficulty if req.difficulty is not None else question.difficulty,
+            "concept": question.concept.name if question.concept else "General"
+        }
+        val_res = MCQValidationService.validate_mcq_deterministic(mcq_payload)
+        if not val_res["valid"]:
+            raise HTTPException(
+                status_code=400,
+                detail=f"MCQ Validation Error: {val_res['reason']}"
+            )
 
     if req.question_text is not None:
         question.question_text = req.question_text

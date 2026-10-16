@@ -9,12 +9,15 @@ from backend.models.session import Session, SessionEvent, CodeRevision
 from backend.models.integrity import IntegritySignal
 from backend.models.explanation import ExplanationQuestion, ExplanationAnswer
 from backend.models.ai_evaluation import AIEvaluation
+from backend.models.assessment_attempt import AssessmentAttempt, AssessmentWarning
 
 # Entity aliases for database and curriculum flexibility
 Subject = Course
 Topic = Module
 QuestionAttempt = Attempt
 CodingAttempt = CodingSubmission
+CodingActivityEvent = SessionEvent
+IntegrityEvent = IntegritySignal
 
 __all__ = [
     "Base",
@@ -39,10 +42,15 @@ __all__ = [
     "CodingAttempt",
     "Session",
     "SessionEvent",
+    "CodingActivityEvent",
     "CodeRevision",
     "IntegritySignal",
+    "IntegrityEvent",
     "ExplanationQuestion",
     "ExplanationAnswer",
-    "AIEvaluation"
+    "AIEvaluation",
+    "AssessmentAttempt",
+    "AssessmentWarning"
 ]
+
 

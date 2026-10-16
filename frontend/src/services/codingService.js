@@ -72,6 +72,48 @@ export const sessionService = {
     const response = await api.get(`/integrity/sessions/${sessionId}/signals`);
     return response.data;
   },
+
+  async recordWarning(sessionId, warningData) {
+    const response = await api.post(`/sessions/${sessionId}/warning`, warningData);
+    return response.data;
+  },
+};
+
+export const assessmentService = {
+  async startAttempt(assessmentId, assessmentType = 'ADAPTIVE_QUIZ') {
+    const response = await api.post('/assessments/start', {
+      assessment_id: String(assessmentId),
+      assessment_type: assessmentType,
+    });
+    return response.data;
+  },
+
+  async finishAttempt(attemptId) {
+    const response = await api.post(`/assessments/${attemptId}/finish`);
+    return response.data;
+  },
+
+  async getStudentAttempts(assessmentId = null) {
+    const response = await api.get('/student/attempts', {
+      params: assessmentId ? { assessment_id: assessmentId } : {},
+    });
+    return response.data;
+  },
+
+  async getTrainerAttempts(params = {}) {
+    const response = await api.get('/trainer/attempts', { params });
+    return response.data;
+  },
+
+  async getAttemptTimeline(attemptId) {
+    const response = await api.get(`/trainer/attempts/${attemptId}/timeline`);
+    return response.data;
+  },
+
+  async validateMCQ(mcqData) {
+    const response = await api.post('/questions/validate', mcqData);
+    return response.data;
+  },
 };
 
 export const integrityService = {

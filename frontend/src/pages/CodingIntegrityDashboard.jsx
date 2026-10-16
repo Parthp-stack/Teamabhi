@@ -159,14 +159,33 @@ export default function CodingIntegrityDashboard() {
   const renderStatusBadge = (status) => {
     switch (status) {
       case 'NORMAL_RHYTHM':
+      case 'NORMAL':
         return (
           <span style={{ backgroundColor: '#ecfdf5', color: '#059669', padding: '4px 10px', borderRadius: '12px', fontSize: '12px', fontWeight: 700 }}>
-            ● Normal Rhythm
+            ● Normal
+          </span>
+        );
+      case 'LOW_RISK':
+        return (
+          <span style={{ backgroundColor: '#eff6ff', color: '#2563eb', padding: '4px 10px', borderRadius: '12px', fontSize: '12px', fontWeight: 700 }}>
+            ● Low Risk
+          </span>
+        );
+      case 'MEDIUM_RISK':
+        return (
+          <span style={{ backgroundColor: '#fffbeb', color: '#d97706', padding: '4px 10px', borderRadius: '12px', fontSize: '12px', fontWeight: 700 }}>
+            ▲ Medium Risk
+          </span>
+        );
+      case 'HIGH_RISK':
+        return (
+          <span style={{ backgroundColor: '#fef2f2', color: '#dc2626', padding: '4px 10px', borderRadius: '12px', fontSize: '12px', fontWeight: 700 }}>
+            ▲ High Risk
           </span>
         );
       case 'REVIEW_SUGGESTED':
         return (
-          <span style={{ backgroundColor: '#fef2f2', color: '#dc2626', padding: '4px 10px', borderRadius: '12px', fontSize: '12px', fontWeight: 700 }}>
+          <span style={{ backgroundColor: '#fff7ed', color: '#ea580c', padding: '4px 10px', borderRadius: '12px', fontSize: '12px', fontWeight: 700 }}>
             ▲ Review Suggested
           </span>
         );

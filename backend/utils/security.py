@@ -56,13 +56,16 @@ def decode_access_token(token: str) -> Dict[str, Any]:
 def get_current_user(token: str = Depends(oauth2_scheme), db: Session = Depends(get_db)) -> User:
     """Extract and verify the current authenticated user from JWT."""
     payload = decode_access_token(token)
-    user_id = payload.get("sub")
-    if user_id is None:
+    sub = payload.get("sub")
+    if sub is None:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Invalid authentication credentials"
         )
-    user = db.query(User).filter(User.id == int(user_id)).first()
+    if str(sub).isdigit():
+        user = db.query(User).filter(User.id == int(sub)).first()
+    else:
+        user = db.query(User).filter(User.email == str(sub)).first()
     if user is None:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
