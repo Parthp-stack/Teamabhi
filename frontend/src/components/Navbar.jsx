@@ -70,7 +70,7 @@ export default function Navbar() {
                 textTransform: 'uppercase',
               }}
             >
-              Phase 2 · Adaptive AI
+              Phase 3 · Integrity & Tracking
             </span>
           </div>
         </div>
@@ -126,8 +126,25 @@ export default function Navbar() {
             cursor: 'pointer',
           }}
         >
-          Trainer View
+          Trainer
         </button>
+        {user?.role === 'TRAINER' && (
+          <button
+            onClick={() => navigate('/trainer/integrity')}
+            style={{
+              fontSize: '12px',
+              padding: '6px 12px',
+              borderRadius: '6px',
+              border: '1px solid #dc2626',
+              backgroundColor: '#fef2f2',
+              color: '#dc2626',
+              fontWeight: 700,
+              cursor: 'pointer',
+            }}
+          >
+            Integrity Dashboard
+          </button>
+        )}
       </div>
 
       {/* User Info & Logout */}

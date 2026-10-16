@@ -104,18 +104,18 @@ Run the automated test suite covering authentication, Bayesian mastery tracking,
 python -m pytest backend/tests
 ```
 
-All 9 test suites pass with zero warnings.
+All 33 test suites across 7 test files pass with zero warnings (100% test pass rate).
 
 ---
 
-## 7. Step-by-Step Hackathon Demo Flow (Phase 2)
+## 7. Step-by-Step Hackathon Demo Flow (Phase 2 & Phase 3)
  
- 1. **Step 1 — Login as Student A**:
+ 1. **Step 1 — Login as Student A (Adaptive Concept DAG)**:
     - Go to `http://localhost:5173/login` and click **"Student A (Alice Walker)"**.
     - Note the recommendation: **"Practice Target: Constructors"** (40% baseline mastery).
     - Open **Concept Graph**: Notice `Programming Basics`, `Classes`, and `Objects` are green (`STRONG`), while `Constructors` is yellow (`DEVELOPING`), and `Inheritance`, `Polymorphism`, and `Dependency Injection` are locked (`LOCKED`).
  
- 2. **Step 2 — Adaptive Question Progression & Bayesian Updating**:
+ 2. **Step 2 — Adaptive Question Progression & AI Tutoring**:
     - Click **Adaptive Practice**: The system presents a `Constructors` question with explainable rationale ("Weakest eligible prerequisite, all prerequisites satisfied").
     - Answer the question: Observe the instant Bayesian mastery update (+4.9% on correct answer).
     - Click **"Explain Concept with AI"**: OpenRouter AI generates an interactive concept breakdown with syntax examples and common pitfalls.
@@ -126,12 +126,25 @@ All 9 test suites pass with zero warnings.
     - Notice that `Objects` is locked because `Classes` has not yet reached the 65% prerequisite mastery threshold.
     - **Proof of Adaptivity**: Student A and Student B receive completely different questions and target different concepts based on prerequisite eligibility!
  
- 4. **Step 4 — Trainer Cohort Overview**:
-    - Switch to **Trainer (Dr. Alan Turing)** using the top bar.
-    - Inspect cohort analytics:
-      - Average mastery per concept across the 7 DAG concepts.
-      - Cohort weakest concept identification (`Dependency Injection`, `Polymorphism`, `Inheritance`).
-      - Individual student average mastery comparison.
+ 4. **Step 4 — Coding Assessment & Sandbox**:
+    - Navigate to **Coding Assessment** (`/student/assessment`).
+    - Monaco Editor records typing bursts, deletions, replacements, and browser visibility changes with exact line/column locations.
+    - Click **Run Tests**: Executes code against visible test cases inside the isolated sandbox.
+    - Click **Submit & Explain Code**: Executes against hidden test cases and initiates the AI viva flow.
+ 
+ 5. **Step 5 — Explain Your Code (AI Viva Evaluation)**:
+    - System presents 2–3 technical questions specifically generated from the student's actual code structure.
+    - Student submits explanations: AI evaluates technical consistency and conceptual understanding.
+ 
+ 6. **Step 6 — Dedicated Coding Integrity Dashboard**:
+    - Switch to **Trainer (Dr. Alan Turing)** and navigate to **Integrity Dashboard** (`/trainer/integrity`).
+    - Searchable session table with filters for `NORMAL_RHYTHM`, `REVIEW_SUGGESTED`, and `INSUFFICIENT_DATA`.
+    - **Typing Rhythm Visualizer**: Recharts plot of character burst sizes vs rolling baseline.
+    - **Chronological Timeline**: Inspect individual events with line ranges (e.g. `L12:1 → L48:20`) and review classifications.
+    - **Trainer Review Panel**: Actions for `Mark Reviewed`, `Dismiss`, and `Add Note` without automatic cheating verdicts.
+ 
+ 7. **Step 7 — Session Replay Studio**:
+    - Click **Full Replay Studio** to scrub step-by-step through the student's code changes with event indicators.
 
 ---
 

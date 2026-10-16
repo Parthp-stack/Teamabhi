@@ -43,23 +43,26 @@ const DEFAULT_PYTHON_BOILERPLATE = `class BankAccount:
 
 # Driver loop for sandbox test cases
 if __name__ == "__main__":
-    import sys
-    lines = [line.strip() for line in sys.stdin if line.strip()]
-    if not lines:
-        sys.exit(0)
-    init_b = float(lines[0])
-    acc = BankAccount("Student", init_b)
-    for cmd_str in lines[1:]:
-        parts = cmd_str.split()
-        cmd = parts[0].lower()
-        if cmd == "deposit":
-            acc.deposit(float(parts[1]))
-            print(acc.get_balance())
-        elif cmd == "withdraw":
-            acc.withdraw(float(parts[1]))
-            print(acc.get_balance())
-        elif cmd == "balance":
-            print(acc.get_balance())
+    try:
+        init_line = input().strip()
+        if init_line:
+            acc = BankAccount("Student", float(init_line))
+            while True:
+                cmd_line = input().strip()
+                if not cmd_line:
+                    break
+                parts = cmd_line.split()
+                cmd = parts[0].lower()
+                if cmd == "deposit":
+                    acc.deposit(float(parts[1]))
+                    print(acc.get_balance())
+                elif cmd == "withdraw":
+                    acc.withdraw(float(parts[1]))
+                    print(acc.get_balance())
+                elif cmd == "balance":
+                    print(acc.get_balance())
+    except (EOFError, StopIteration):
+        pass
 `;
 
 export default function CodingAssessmentPage() {
@@ -75,6 +78,10 @@ export default function CodingAssessmentPage() {
   const [submitting, setSubmitting] = useState(false);
   const [runResult, setRunResult] = useState(null);
   const [activeTab, setActiveTab] = useState('tests'); // tests or output
+
+  const editorRef = useRef(null);
+  const isPastingRef = useRef(false);
+  const hasRunOnceRef = useRef(false);
 
   // Hook for session recording
   const { recordEvent, flushEvents } = useSessionRecorder(sessionId);
@@ -95,28 +102,86 @@ export default function CodingAssessmentPage() {
     init();
   }, [problemIdFromState]);
 
-  // Handle code change in Monaco Editor and record typing/paste events
-  const handleEditorChange = (value, event) => {
-    const prevLength = code.length;
-    const newLength = value.length;
-    const diff = newLength - prevLength;
+  // Monaco Editor onMount handler
+  const handleEditorMount = (editor, monaco) => {
+    editorRef.current = editor;
 
+    // Listen for paste event directly in Monaco
+    if (editor.onDidPaste) {
+      editor.onDidPaste((e) => {
+        isPastingRef.current = true;
+      });
+    }
+
+    // Listen for copy command initiated inside the editor
+    editor.onKeyDown((e) => {
+      if ((e.ctrlKey || e.metaKey) && e.code === 'KeyC') {
+        const selection = editor.getSelection();
+        recordEvent('COPY', {
+          codeLocation: {
+            start_line: selection.startLineNumber,
+            start_column: selection.startColumn,
+            end_line: selection.endLineNumber,
+            end_column: selection.endColumn,
+          },
+          metadata: { action: 'editor_internal_copy' },
+        });
+      }
+    });
+
+    // Editor focus/blur tracking
+    editor.onDidFocusEditorText(() => {
+      recordEvent('FOCUS', { metadata: { target: 'editor_text' } });
+    });
+
+    editor.onDidBlurEditorText(() => {
+      recordEvent('BLUR', { metadata: { target: 'editor_text' } });
+    });
+  };
+
+  // Handle code change in Monaco Editor and record typing/paste events with exact code location
+  const handleEditorChange = (value, event) => {
     setCode(value);
 
-    // If a sudden large burst of characters occurred (paste detection on frontend)
-    if (diff > 50) {
-      recordEvent('PASTE', {
-        charCount: diff,
-        preview: value.slice(-diff).slice(0, 80),
-        detail: `Large text block inserted (+${diff} chars)`,
-      });
-    } else if (diff < 0) {
-      recordEvent('DELETE', {
-        charsRemoved: Math.abs(diff),
-      });
+    // If event contains detailed model changes
+    if (event?.changes && event.changes.length > 0) {
+      for (const change of event.changes) {
+        const inserted = change.text?.length || 0;
+        const deleted = change.rangeLength || 0;
+        const codeLocation = {
+          start_line: change.range.startLineNumber,
+          start_column: change.range.startColumn,
+          end_line: change.range.endLineNumber,
+          end_column: change.range.endColumn,
+        };
+
+        let evType = 'TYPE';
+        if (isPastingRef.current || inserted >= 100) {
+          evType = 'PASTE';
+          isPastingRef.current = false;
+        } else if (hasRunOnceRef.current) {
+          evType = 'EDIT_AFTER_RUN';
+        } else if (deleted > 0 && inserted > 0) {
+          evType = 'REPLACE';
+        } else if (deleted > 0 && inserted === 0) {
+          evType = 'DELETE';
+        }
+
+        recordEvent(evType, {
+          codeLocation,
+          insertedCount: inserted,
+          deletedCount: deleted,
+          currentCode: value,
+          metadata: {
+            preview: change.text ? change.text.slice(0, 100) : '',
+            lines_affected: change.range.endLineNumber - change.range.startLineNumber + 1,
+          },
+        });
+      }
     } else {
-      recordEvent('KEYSTROKE', {
-        length: newLength,
+      // Fallback
+      recordEvent(hasRunOnceRef.current ? 'EDIT_AFTER_RUN' : 'TYPE', {
+        currentCode: value,
       });
     }
   };
@@ -125,7 +190,11 @@ export default function CodingAssessmentPage() {
   const handleRun = async () => {
     if (!problem) return;
     setRunning(true);
-    recordEvent('RUN', { language, codeLength: code.length });
+    hasRunOnceRef.current = true;
+    recordEvent('RUN', {
+      currentCode: code,
+      metadata: { language, codeLength: code.length },
+    });
     await flushEvents();
 
     try {
@@ -143,7 +212,10 @@ export default function CodingAssessmentPage() {
   const handleSubmit = async () => {
     if (!problem) return;
     setSubmitting(true);
-    recordEvent('SUBMIT', { language, codeLength: code.length });
+    recordEvent('SUBMIT', {
+      currentCode: code,
+      metadata: { language, codeLength: code.length },
+    });
     await flushEvents();
 
     try {
@@ -341,6 +413,7 @@ export default function CodingAssessmentPage() {
             language={language === 'cpp' ? 'cpp' : 'python'}
             theme="vs-dark"
             value={code}
+            onMount={handleEditorMount}
             onChange={handleEditorChange}
             options={{
               minimap: { enabled: false },

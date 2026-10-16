@@ -74,6 +74,38 @@ export const sessionService = {
   },
 };
 
+export const integrityService = {
+  async getDashboardSessions(params = {}) {
+    const response = await api.get('/integrity/sessions', { params });
+    return response.data;
+  },
+
+  async getSessionTimeline(sessionId) {
+    const response = await api.get(`/integrity/sessions/${sessionId}/timeline`);
+    return response.data;
+  },
+
+  async getTypingRhythm(sessionId) {
+    const response = await api.get(`/integrity/sessions/${sessionId}/rhythm`);
+    return response.data;
+  },
+
+  async getRevisionComparison(sessionId, revisionId) {
+    const response = await api.get(`/integrity/sessions/${sessionId}/revisions/${revisionId}`);
+    return response.data;
+  },
+
+  async submitTrainerReview(sessionId, reviewData) {
+    const response = await api.post(`/integrity/sessions/${sessionId}/review`, reviewData);
+    return response.data;
+  },
+
+  async triggerCleanup(retentionDays) {
+    const response = await api.post('/integrity/cleanup', null, { params: { retention_days: retentionDays } });
+    return response.data;
+  },
+};
+
 export const trainerService = {
   async getDashboardOverview() {
     const response = await api.get('/trainer/dashboard');

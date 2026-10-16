@@ -27,9 +27,13 @@ logger = logging.getLogger("adaptive_portal")
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    # Startup: create tables and seed demo data
     logger.info("Initializing database schema...")
     Base.metadata.create_all(bind=engine)
+    try:
+        from backend.utils.migrate_phase3 import migrate_database
+        migrate_database()
+    except Exception as e:
+        logger.warning(f"Migration notice: {e}")
     
     db = SessionLocal()
     try:

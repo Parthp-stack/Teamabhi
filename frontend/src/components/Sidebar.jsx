@@ -6,7 +6,8 @@ import {
   GitFork,
   Sparkles,
   Users,
-  BookOpen,
+  Code2,
+  ShieldAlert,
 } from 'lucide-react';
 
 export default function Sidebar() {
@@ -67,6 +68,10 @@ export default function Sidebar() {
             <Sparkles size={18} />
             Adaptive Practice
           </NavLink>
+          <NavLink to="/student/assessment" style={linkStyle}>
+            <Code2 size={18} />
+            Coding Assessment
+          </NavLink>
         </nav>
       </div>
 
@@ -89,6 +94,10 @@ export default function Sidebar() {
           <NavLink to="/trainer/dashboard" style={linkStyle}>
             <Users size={18} />
             Cohort Overview
+          </NavLink>
+          <NavLink to="/trainer/integrity" style={linkStyle}>
+            <ShieldAlert size={18} />
+            Integrity Dashboard
           </NavLink>
         </nav>
       </div>

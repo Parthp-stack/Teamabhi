@@ -11,6 +11,7 @@ import ExplainCodePage from './pages/ExplainCodePage';
 import TrainerDashboard from './pages/TrainerDashboard';
 import TrainerStudentDetailPage from './pages/TrainerStudentDetailPage';
 import SessionReplayPage from './pages/SessionReplayPage';
+import CodingIntegrityDashboard from './pages/CodingIntegrityDashboard';
 import { authService } from './services/authService';
 
 // Layout wrapper for authenticated views
@@ -135,6 +136,16 @@ export default function App() {
             <AppLayout>
               <TrainerRoute>
                 <SessionReplayPage />
+              </TrainerRoute>
+            </AppLayout>
+          }
+        />
+        <Route
+          path="/trainer/integrity"
+          element={
+            <AppLayout>
+              <TrainerRoute>
+                <CodingIntegrityDashboard />
               </TrainerRoute>
             </AppLayout>
           }

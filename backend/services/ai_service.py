@@ -204,3 +204,104 @@ class AIService:
                 "correct_answer": f"Decoupling interface contracts and reinforcing {concept} modularity",
                 "explanation": f"{concept} isolates internal mechanics and establishes robust contracts."
             }
+
+    @classmethod
+    async def generate_code_questions(
+        cls,
+        source_code: str,
+        problem_title: str,
+        language: str = "python"
+    ) -> List[Dict[str, str]]:
+        """
+        Generate 2-3 technical viva questions based on the student's actual code implementation.
+        """
+        system_prompt = (
+            "You are a computer science professor conducting an oral viva for a coding assessment. "
+            "Based on the provided student source code, generate 2-3 specific technical questions "
+            "that test whether the student truly understands their implementation, state mutations, and edge case handling. "
+            "Return ONLY a JSON array with objects containing 'question' and 'expected_concept'."
+        )
+        user_prompt = f"Problem: {problem_title}\nLanguage: {language}\nSource Code:\n{source_code}"
+
+        content = await cls._call_openrouter(system_prompt, user_prompt, temperature=0.3)
+        if content:
+            try:
+                clean = re.sub(r"^```(?:json)?\s*", "", content.strip())
+                clean = re.sub(r"\s*```$", "", clean)
+                data = json.loads(clean)
+                if isinstance(data, list) and len(data) > 0:
+                    return data[:3]
+            except Exception as e:
+                print(f"[AIService] Failed to parse generated code questions: {e}")
+
+        # Deterministic fallback based on code patterns
+        fallback_questions = [
+            {
+                "question": f"In your {problem_title} implementation, how did you enforce state validation and invariant safety?",
+                "expected_concept": "Invariant Validation & Exception Handling"
+            },
+            {
+                "question": "Walk through what happens in memory and state mutation when edge cases (e.g. invalid bounds or zero arguments) occur.",
+                "expected_concept": "Edge Case Flow & State Mutation"
+            }
+        ]
+        if "def " in source_code or "class " in source_code:
+            fallback_questions.append({
+                "question": "Why did you choose this specific modular class and method structure for encapsulation?",
+                "expected_concept": "Encapsulation & Architecture"
+            })
+        return fallback_questions
+
+    @classmethod
+    async def evaluate_explanation(
+        cls,
+        source_code: str,
+        question: str,
+        expected_concept: str,
+        student_answer: str
+    ) -> Dict[str, Any]:
+        """
+        Evaluate student explanation of their code for technical alignment and comprehension.
+        """
+        system_prompt = (
+            "You are a coding assessment evaluator. "
+            "Evaluate whether the student's explanation aligns with their actual submitted code and demonstrates genuine understanding. "
+            "Return ONLY a JSON object with: 'score' (float between 0.0 and 10.0) and 'evaluation' (concise 1-2 sentence feedback)."
+        )
+        user_prompt = (
+            f"Source Code:\n{source_code}\n\n"
+            f"Viva Question: {question}\n"
+            f"Expected Concept: {expected_concept}\n"
+            f"Student Answer: {student_answer}"
+        )
+
+        content = await cls._call_openrouter(system_prompt, user_prompt, temperature=0.1)
+        if content:
+            try:
+                clean = re.sub(r"^```(?:json)?\s*", "", content.strip())
+                clean = re.sub(r"\s*```$", "", clean)
+                data = json.loads(clean)
+                if "score" in data and "evaluation" in data:
+                    return {
+                        "score": float(data["score"]),
+                        "evaluation": str(data["evaluation"])
+                    }
+            except Exception as e:
+                print(f"[AIService] Failed to parse evaluation: {e}")
+
+        # Deterministic heuristic fallback
+        ans_len = len(student_answer.strip().split())
+        if ans_len >= 12:
+            score = 8.5
+            eval_text = "Detailed conceptual explanation demonstrates clear understanding of code invariants."
+        elif ans_len >= 5:
+            score = 6.5
+            eval_text = "Brief answer captures primary behavior but lacks deeper rationale."
+        else:
+            score = 3.0
+            eval_text = "Superficial answer. Recommended for trainer review."
+
+        return {
+            "score": score,
+            "evaluation": eval_text
+        }

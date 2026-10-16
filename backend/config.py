@@ -25,6 +25,9 @@ class Settings(BaseSettings):
     SANDBOX_MEMORY_MB: int = 128 # MB
     SANDBOX_MODE: str = os.getenv("SANDBOX_MODE", "auto") # auto, docker, or isolated_proc
 
+    # Integrity Audit Retention
+    INTEGRITY_DATA_RETENTION_DAYS: int = int(os.getenv("INTEGRITY_DATA_RETENTION_DAYS", "90"))
+
     # CORS
     FRONTEND_URL: str = os.getenv("FRONTEND_URL", "http://localhost:5173")
 

@@ -1,15 +1,24 @@
 from sqlalchemy.orm import Session
-from datetime import datetime, timezone
+from datetime import datetime, timezone, timedelta
 from backend.models.user import User, UserRole
 from backend.models.course import Course, Module
 from backend.models.concept import Concept, ConceptPrerequisite
 from backend.models.question import Question
 from backend.models.mastery import StudentMastery, MasteryHistory
+from backend.models.coding import CodingProblem, TestCase, CodingSubmission
+from backend.models.session import Session as CodingSession, SessionEvent, CodeRevision
+from backend.models.integrity import IntegritySignal
 from backend.utils.security import hash_password
 
 def seed_database(db: Session):
     existing_user = db.query(User).first()
     if existing_user:
+        prob = db.query(CodingProblem).first()
+        if not prob:
+            student_a = db.query(User).filter(User.email == "student.a@adaptive.edu").first()
+            student_b = db.query(User).filter(User.email == "student.b@adaptive.edu").first()
+            if student_a and student_b:
+                seed_coding_and_integrity(db, student_a, student_b)
         return
 
     print("[Seed Phase 2] Seeding initial database for Adaptive Learning & AI...")
@@ -563,4 +572,167 @@ def seed_database(db: Session):
         db.add(mh)
 
     db.commit()
-    print("[Seed Phase 2] Successfully seeded Course, 5 Modules, 7 Concepts, 35 Questions, and Demo Students A & B.")
+    seed_coding_and_integrity(db, student_a, student_b)
+
+def seed_coding_and_integrity(db: Session, student_a, student_b):
+    if db.query(CodingProblem).count() > 0:
+        return
+
+    # 8. Seed Coding Problem: "Encapsulated Bank Account"
+    prob = CodingProblem(
+        title="Encapsulated Bank Account",
+        description="""Implement an object-oriented BankAccount class in Python or C++ that encapsulates balance state and validates operational invariants:
+
+Requirements:
+1. `__init__(self, account_holder: str, initial_balance: float = 0.0)`
+   - Raises `ValueError` if `initial_balance < 0`.
+2. `deposit(self, amount: float) -> float`
+   - Raises `ValueError` if `amount <= 0`.
+   - Returns updated balance.
+3. `withdraw(self, amount: float) -> float`
+   - Raises `ValueError` if `amount <= 0` or `amount > balance`.
+   - Returns updated balance.
+4. `get_balance(self) -> float`
+   - Returns current balance.
+
+Input Format for Sandbox Execution:
+Line 1: Initial balance (float)
+Subsequent Lines: Commands e.g. "deposit 50.0", "withdraw 20.0", "balance"
+""",
+        difficulty="MEDIUM",
+        allowed_languages=["python", "cpp"],
+        time_limit=2.0,
+        memory_limit=128
+    )
+    db.add(prob)
+    db.commit()
+    db.refresh(prob)
+
+    # Test cases: 2 visible, 2 hidden
+    tc1 = TestCase(problem_id=prob.id, input="100.0\ndeposit 50.0\nwithdraw 30.0\nbalance\n", expected_output="150.0\n120.0\n120.0", is_hidden=False)
+    tc2 = TestCase(problem_id=prob.id, input="0.0\ndeposit 10.0\nbalance\n", expected_output="10.0\n10.0", is_hidden=False)
+    tc3 = TestCase(problem_id=prob.id, input="500.0\nwithdraw 100.0\nwithdraw 200.0\nbalance\n", expected_output="400.0\n200.0\n200.0", is_hidden=True)
+    tc4 = TestCase(problem_id=prob.id, input="25.5\ndeposit 74.5\nwithdraw 50.0\nbalance\n", expected_output="100.0\n50.0\n50.0", is_hidden=True)
+    db.add_all([tc1, tc2, tc3, tc4])
+    db.commit()
+
+    # 9. Seed Demo Assessment Sessions for Coding Integrity Dashboard
+    t_base = datetime.now(timezone.utc) - timedelta(hours=2)
+
+    # Session 1: Student A (Alice) -> Large paste observed (REVIEW_SUGGESTED)
+    sess_a = CodingSession(
+        student_id=student_a.id,
+        assessment_id=prob.id,
+        started_at=t_base,
+        ended_at=t_base + timedelta(minutes=12),
+        overall_review_status="REVIEW_SUGGESTED",
+        is_reviewed=False
+    )
+    db.add(sess_a)
+    db.commit()
+    db.refresh(sess_a)
+
+    ev_a_start = SessionEvent(session_id=sess_a.id, student_id=student_a.id, assessment_id=prob.id, event_type="SESSION_START", server_timestamp=t_base, timestamp=t_base, classification="Session lifecycle", review_status="NORMAL_RHYTHM")
+    ev_a_type1 = SessionEvent(session_id=sess_a.id, student_id=student_a.id, assessment_id=prob.id, event_type="TYPE", server_timestamp=t_base + timedelta(seconds=15), timestamp=t_base + timedelta(seconds=15), inserted_character_count=18, code_location={"start_line": 1, "start_column": 1, "end_line": 1, "end_column": 19}, duration=1.2, classification="Normal typing", review_status="NORMAL_RHYTHM")
+    ev_a_type2 = SessionEvent(session_id=sess_a.id, student_id=student_a.id, assessment_id=prob.id, event_type="TYPE", server_timestamp=t_base + timedelta(seconds=30), timestamp=t_base + timedelta(seconds=30), inserted_character_count=24, code_location={"start_line": 2, "start_column": 5, "end_line": 2, "end_column": 29}, duration=0.9, classification="Normal typing", review_status="NORMAL_RHYTHM")
+    ev_a_run1 = SessionEvent(session_id=sess_a.id, student_id=student_a.id, assessment_id=prob.id, event_type="RUN", server_timestamp=t_base + timedelta(seconds=60), timestamp=t_base + timedelta(seconds=60), classification="Code execution", review_status="NORMAL_RHYTHM")
+    ev_a_edit = SessionEvent(session_id=sess_a.id, student_id=student_a.id, assessment_id=prob.id, event_type="EDIT_AFTER_RUN", server_timestamp=t_base + timedelta(seconds=90), timestamp=t_base + timedelta(seconds=90), inserted_character_count=15, code_location={"start_line": 3, "start_column": 9, "end_line": 3, "end_column": 24}, classification="Iterative edit after run", review_status="NORMAL_RHYTHM")
+    
+    # Large Paste Event (+1,240 characters)
+    ev_a_paste = SessionEvent(
+        session_id=sess_a.id,
+        student_id=student_a.id,
+        assessment_id=prob.id,
+        event_type="PASTE",
+        server_timestamp=t_base + timedelta(seconds=140),
+        timestamp=t_base + timedelta(seconds=140),
+        inserted_character_count=1240,
+        code_location={"start_line": 12, "start_column": 1, "end_line": 48, "end_column": 20},
+        duration=0.1,
+        classification="Large paste",
+        review_status="REVIEW_SUGGESTED",
+        classification_reason="Observed paste event inserted substantial content (1,240 characters).",
+        event_metadata={"charCount": 1240, "preview": "class BankAccount:\n    def __init__(self..."}
+    )
+    ev_a_submit = SessionEvent(session_id=sess_a.id, student_id=student_a.id, assessment_id=prob.id, event_type="SUBMIT", server_timestamp=t_base + timedelta(seconds=180), timestamp=t_base + timedelta(seconds=180), classification="Code submission", review_status="NORMAL_RHYTHM")
+    
+    db.add_all([ev_a_start, ev_a_type1, ev_a_type2, ev_a_run1, ev_a_edit, ev_a_paste, ev_a_submit])
+    db.commit()
+
+    # Integrity Signal pointing directly to ev_a_paste
+    sig_a = IntegritySignal(
+        session_id=sess_a.id,
+        event_id=ev_a_paste.id,
+        signal_type="LARGE_PASTE",
+        severity="HIGH",
+        description="Evidence for review: Large code paste of 1,240 characters detected at 14:12:20.",
+        timestamp=ev_a_paste.timestamp,
+        review_status="PENDING"
+    )
+    db.add(sig_a)
+
+    # Session 2: Student B (Bob) -> Consistent rhythm (NORMAL_RHYTHM)
+    t_b_base = datetime.now(timezone.utc) - timedelta(hours=1)
+    sess_b = CodingSession(
+        student_id=student_b.id,
+        assessment_id=prob.id,
+        started_at=t_b_base,
+        ended_at=t_b_base + timedelta(minutes=15),
+        overall_review_status="NORMAL_RHYTHM",
+        is_reviewed=False
+    )
+    db.add(sess_b)
+    db.commit()
+    db.refresh(sess_b)
+
+    b_events = []
+    b_events.append(SessionEvent(session_id=sess_b.id, student_id=student_b.id, assessment_id=prob.id, event_type="SESSION_START", server_timestamp=t_b_base, timestamp=t_b_base, classification="Session lifecycle", review_status="NORMAL_RHYTHM"))
+    for i in range(10):
+        t_ev = t_b_base + timedelta(seconds=10 + i * 15)
+        b_events.append(SessionEvent(
+            session_id=sess_b.id,
+            student_id=student_b.id,
+            assessment_id=prob.id,
+            event_type="TYPE",
+            server_timestamp=t_ev,
+            timestamp=t_ev,
+            inserted_character_count=14,
+            code_location={"start_line": i + 1, "start_column": 1, "end_line": i + 1, "end_column": 15},
+            duration=0.8,
+            classification="Normal typing",
+            review_status="NORMAL_RHYTHM",
+            classification_reason="Typing rhythm consistent with observed activity."
+        ))
+    b_events.append(SessionEvent(session_id=sess_b.id, student_id=student_b.id, assessment_id=prob.id, event_type="RUN", server_timestamp=t_b_base + timedelta(seconds=200), timestamp=t_b_base + timedelta(seconds=200), classification="Code execution", review_status="NORMAL_RHYTHM"))
+    b_events.append(SessionEvent(session_id=sess_b.id, student_id=student_b.id, assessment_id=prob.id, event_type="SUBMIT", server_timestamp=t_b_base + timedelta(seconds=240), timestamp=t_b_base + timedelta(seconds=240), classification="Code submission", review_status="NORMAL_RHYTHM"))
+    db.add_all(b_events)
+
+    # Session 3: Incomplete / brief session (INSUFFICIENT_DATA)
+    sess_c = CodingSession(
+        student_id=student_a.id,
+        assessment_id=prob.id,
+        started_at=datetime.now(timezone.utc) - timedelta(minutes=20),
+        ended_at=datetime.now(timezone.utc) - timedelta(minutes=19),
+        overall_review_status="INSUFFICIENT_DATA",
+        is_reviewed=False
+    )
+    db.add(sess_c)
+    db.commit()
+    db.refresh(sess_c)
+
+    c_events = [
+        SessionEvent(session_id=sess_c.id, student_id=student_a.id, assessment_id=prob.id, event_type="SESSION_START", server_timestamp=sess_c.started_at, timestamp=sess_c.started_at, classification="Session lifecycle", review_status="NORMAL_RHYTHM"),
+        SessionEvent(session_id=sess_c.id, student_id=student_a.id, assessment_id=prob.id, event_type="TYPE", server_timestamp=sess_c.started_at + timedelta(seconds=5), timestamp=sess_c.started_at + timedelta(seconds=5), inserted_character_count=6, duration=0.4, classification="Normal typing", review_status="NORMAL_RHYTHM"),
+        SessionEvent(session_id=sess_c.id, student_id=student_a.id, assessment_id=prob.id, event_type="SESSION_END", server_timestamp=sess_c.ended_at, timestamp=sess_c.ended_at, classification="Session lifecycle", review_status="NORMAL_RHYTHM")
+    ]
+    db.add_all(c_events)
+    db.commit()
+
+    print("[Seed Phase 3] Successfully seeded Course, 5 Modules, 7 Concepts, 35 Questions, Coding Problem & Test Cases, and 3 Demo Integrity Sessions.")
+
+if __name__ == "__main__":
+    from backend.database import SessionLocal
+    db = SessionLocal()
+    seed_database(db)
+    db.close()
+

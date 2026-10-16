@@ -5,7 +5,7 @@ from backend.models.concept import Concept, ConceptPrerequisite
 from backend.models.question import Question, Attempt
 from backend.models.mastery import StudentMastery, MasteryHistory
 from backend.models.coding import CodingProblem, TestCase, CodingSubmission
-from backend.models.session import Session, SessionEvent
+from backend.models.session import Session, SessionEvent, CodeRevision
 from backend.models.integrity import IntegritySignal
 from backend.models.explanation import ExplanationQuestion, ExplanationAnswer
 
@@ -26,6 +26,7 @@ __all__ = [
     "CodingSubmission",
     "Session",
     "SessionEvent",
+    "CodeRevision",
     "IntegritySignal",
     "ExplanationQuestion",
     "ExplanationAnswer"
