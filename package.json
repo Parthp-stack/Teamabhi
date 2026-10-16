@@ -1,0 +1,13 @@
+{
+  "name": "adaptive-learning-portal",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Adaptive Learning & Assessment Portal with Bayesian Knowledge Tracing",
+  "scripts": {
+    "dev": "npm --prefix frontend run dev",
+    "start": "npm --prefix frontend run dev",
+    "frontend": "npm --prefix frontend run dev",
+    "backend": "python -m uvicorn backend.main:app --reload --port 8000",
+    "test": "python -m pytest backend/tests"
+  }
+}

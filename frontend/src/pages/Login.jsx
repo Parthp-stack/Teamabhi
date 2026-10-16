@@ -23,7 +23,11 @@ export default function Login() {
         navigate('/student/dashboard');
       }
     } catch (err) {
-      setError(err.response?.data?.detail || 'Login failed. Please check credentials.');
+      if (!err.response) {
+        setError('Cannot connect to backend server. Please make sure the backend is running on http://localhost:8000.');
+      } else {
+        setError(err.response?.data?.detail || 'Login failed. Please check your email and password.');
+      }
     } finally {
       setLoading(false);
     }
