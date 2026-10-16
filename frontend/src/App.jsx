@@ -16,6 +16,41 @@ import CurriculumManagementPage from './pages/CurriculumManagementPage';
 import RepoEvaluationDevOpsPage from './pages/RepoEvaluationDevOpsPage';
 import { authService } from './services/authService';
 
+class ErrorBoundary extends React.Component {
+  constructor(props) {
+    super(props);
+    this.state = { hasError: false, error: null };
+  }
+
+  static getDerivedStateFromError(error) {
+    return { hasError: true, error };
+  }
+
+  componentDidCatch(error, errorInfo) {
+    console.error("ErrorBoundary caught an error:", error, errorInfo);
+  }
+
+  render() {
+    if (this.state.hasError) {
+      return (
+        <div style={{ padding: '40px', maxWidth: '600px', margin: '40px auto', backgroundColor: '#ffffff', borderRadius: '12px', border: '1px solid #fecaca', boxShadow: '0 4px 6px rgba(0,0,0,0.05)' }}>
+          <h2 style={{ color: '#dc2626', fontSize: '18px', fontWeight: 800, marginTop: 0 }}>An unexpected error occurred</h2>
+          <p style={{ color: '#64748b', fontSize: '14px', lineHeight: '1.5' }}>
+            {this.state.error?.message || "Something went wrong while rendering this section."}
+          </p>
+          <button
+            onClick={() => { this.setState({ hasError: false }); window.location.reload(); }}
+            style={{ padding: '8px 16px', backgroundColor: '#4f46e5', color: '#ffffff', border: 'none', borderRadius: '6px', fontWeight: 700, cursor: 'pointer' }}
+          >
+            Reload Page
+          </button>
+        </div>
+      );
+    }
+    return this.props.children;
+  }
+}
+
 // Layout wrapper for authenticated views
 function AppLayout({ children }) {
   const user = authService.getCurrentUser();
@@ -29,7 +64,9 @@ function AppLayout({ children }) {
       <div style={{ display: 'flex', flex: 1 }}>
         <Sidebar />
         <main style={{ flex: 1, padding: '24px', overflowY: 'auto' }}>
-          {children}
+          <ErrorBoundary>
+            {children}
+          </ErrorBoundary>
         </main>
       </div>
     </div>

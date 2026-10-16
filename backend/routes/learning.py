@@ -450,9 +450,9 @@ def get_student_adaptive_score(
         status = MasteryService.get_concept_status(score, prereq_eval["eligible"], attempts=att)
 
         if score >= 75.0:
-            strong_concepts.append({"id": c.id, "name": c.name, "mastery": score, "topic": topic_name})
+            strong_concepts.append({"id": c.id, "name": c.name, "mastery": score, "mastery_score": score, "topic": topic_name, "topic_name": topic_name})
         elif score < 50.0 and (att > 0 or not prereq_eval["eligible"]):
-            weak_concepts.append({"id": c.id, "name": c.name, "mastery": score, "topic": topic_name, "reason": "Low mastery or prerequisite lock"})
+            weak_concepts.append({"id": c.id, "name": c.name, "mastery": score, "mastery_score": score, "topic": topic_name, "topic_name": topic_name, "reason": "Low mastery or prerequisite lock"})
 
         concept_details.append({
             "id": c.id,

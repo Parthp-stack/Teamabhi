@@ -576,7 +576,7 @@ export default function StudentDashboard() {
                         <div>
                           <div style={{ fontWeight: 800, fontSize: '13px', color: '#9a3412' }}>{wc.name}</div>
                           <div style={{ fontSize: '11px', color: '#78350f' }}>
-                            Mastery: {wc.mastery_score.toFixed(0)}% · {wc.topic_name || 'Data Structures'}
+                            Mastery: {(wc.mastery_score ?? wc.mastery ?? 0).toFixed(0)}% · {wc.topic_name || wc.topic || 'Data Structures'}
                           </div>
                         </div>
                         <button
@@ -655,10 +655,11 @@ export default function StudentDashboard() {
               }}
             >
               {learningPath?.path?.map((step, idx) => {
-                const isTarget = step.is_target;
-                const isCompleted = step.status === 'COMPLETED';
-                const isLocked = step.status === 'LOCKED';
-                const isEligible = step.status === 'ELIGIBLE' && !isTarget;
+                const stepName = step.concept_name || step.name;
+                const isTarget = step.is_target || (learningPath?.current_concept && stepName === learningPath.current_concept);
+                const isCompleted = step.status === 'COMPLETED' || step.status === 'MASTERED';
+                const isLocked = step.status === 'LOCKED' || !step.eligible;
+                const isEligible = (step.status === 'ELIGIBLE' || step.eligible) && !isTarget;
 
                 let icon = <Check size={14} color="#ffffff" />;
                 let bgColor = '#10b981';
@@ -683,7 +684,7 @@ export default function StudentDashboard() {
                 }
 
                 return (
-                  <React.Fragment key={step.concept_id}>
+                  <React.Fragment key={step.concept_id || step.id || idx}>
                     <div
                       style={{
                         display: 'flex',
@@ -720,7 +721,7 @@ export default function StudentDashboard() {
                           textAlign: 'center',
                         }}
                       >
-                        {step.concept_name}
+                        {stepName}
                       </div>
                       <div
                         style={{
@@ -730,7 +731,7 @@ export default function StudentDashboard() {
                           marginTop: '4px',
                         }}
                       >
-                        {step.mastery.toFixed(0)}% · {step.status}
+                        {(step.mastery || 0).toFixed(0)}% · {step.status}
                       </div>
                       {isTarget && (
                         <div
@@ -894,7 +895,7 @@ export default function StudentDashboard() {
                         />
                       </div>
                       <span style={{ fontWeight: 800, fontSize: '13px', color: '#0f172a', width: '38px', textAlign: 'right' }}>
-                        {c.mastery_score.toFixed(0)}%
+                        {(c.mastery_score ?? c.mastery ?? 0).toFixed(0)}%
                       </span>
                     </div>
 
@@ -965,7 +966,7 @@ export default function StudentDashboard() {
                       transition: 'all 0.15s ease',
                     }}
                   >
-                    {course.name} ({course.code})
+                    {course.name || course.title} {course.code ? `(${course.code})` : ''}
                   </button>
                 );
               })}
