@@ -17,7 +17,9 @@ from backend.services.adaptive_engine import AdaptiveEngine
 from backend.services.mastery_service import MasteryService
 from backend.services.ai_service import AIService
 from backend.services.mcq_validation_service import MCQValidationService
-from backend.models.assessment_attempt import AssessmentAttempt, AssessmentWarning
+from backend.models.assessment_attempt import AssessmentAttempt, AssessmentWarning, QuestionAttempt, StudentConceptProgress
+from backend.models.integrity import IntegritySignal, IntegrityEvent
+from backend.services.integrity_service import IntegrityService
 
 router = APIRouter(tags=["Adaptive Learning & Questions"])
 
@@ -666,6 +668,91 @@ def get_concept_breakdown(
 class AssessmentStartRequest(BaseModel):
     assessment_id: str
     assessment_type: Optional[str] = "ADAPTIVE_QUIZ"
+    course_id: Optional[int] = None
+    module_id: Optional[int] = None
+    concept_id: Optional[int] = None
+    resume: Optional[bool] = True
+
+class QuestionNavigateRequest(BaseModel):
+    target_question_number: int
+
+class QuestionAnswerRequest(BaseModel):
+    question_number: Optional[int] = None
+    question_id: Optional[int] = None
+    selected_answer: str
+    time_taken: Optional[float] = 0.0
+
+def build_assessment_state_dict(attempt: AssessmentAttempt, db: Session) -> Dict[str, Any]:
+    qa_list = db.query(QuestionAttempt).filter(
+        QuestionAttempt.attempt_id == attempt.id
+    ).order_by(QuestionAttempt.question_number.asc()).all()
+
+    q_data = []
+    answered_count = 0
+    unanswered_count = 0
+    changed_count = 0
+    visited_count = 0
+
+    for qa in qa_list:
+        q = qa.question
+        if qa.visited:
+            visited_count += 1
+        if qa.is_changed:
+            changed_count += 1
+        if qa.selected_answer and len(qa.selected_answer.strip()) > 0:
+            answered_count += 1
+        else:
+            unanswered_count += 1
+
+        q_data.append({
+            "id": qa.id,
+            "question_id": qa.question_id,
+            "question_number": qa.question_number,
+            "question_text": q.question_text if q else "",
+            "question_type": q.question_type if q else "MCQ",
+            "difficulty": q.difficulty if q else "MEDIUM",
+            "concept_id": q.concept_id if q else None,
+            "concept_name": q.concept.name if (q and q.concept) else "General",
+            "concept_description": q.concept.description if (q and q.concept) else "",
+            "topic_name": q.topic.title if (q and q.topic) else "",
+            "options": q.options if q else [],
+            "code_snippet": q.code_snippet if q else None,
+            "selected_answer": qa.selected_answer,
+            "previous_answer": qa.previous_answer,
+            "answer_status": qa.answer_status,
+            "visited": qa.visited,
+            "submitted": qa.submitted,
+            "is_changed": qa.is_changed,
+            "is_correct": qa.is_correct,
+            "correct_answer": q.correct_answer if q else None,
+            "explanation": q.explanation if q else None,
+            "score": qa.score,
+            "time_taken": qa.time_taken,
+            "timestamp": qa.timestamp.isoformat() if qa.timestamp else None
+        })
+
+    curr_idx = attempt.current_question_index or 1
+    curr_q = next((q for q in q_data if q["question_number"] == curr_idx), q_data[0] if q_data else None)
+
+    return {
+        "attempt_id": attempt.id,
+        "assessment_id": attempt.assessment_id,
+        "assessment_type": attempt.assessment_type,
+        "attempt_number": attempt.attempt_number,
+        "status": attempt.status,
+        "current_question_index": curr_idx,
+        "current_question": curr_q,
+        "total_questions": len(q_data),
+        "score": attempt.score,
+        "questions": q_data,
+        "summary": {
+            "total": len(q_data),
+            "answered": answered_count,
+            "unanswered": unanswered_count,
+            "changed": changed_count,
+            "visited": visited_count
+        }
+    }
 
 @router.post("/assessments/start")
 def start_assessment_attempt(
@@ -673,30 +760,405 @@ def start_assessment_attempt(
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db)
 ):
-    prev_attempts_count = db.query(AssessmentAttempt).filter(
-        AssessmentAttempt.student_id == current_user.id,
-        AssessmentAttempt.assessment_id == req.assessment_id
-    ).count()
+    """
+    Starts or resumes an assessment attempt.
+    Preserves existing question navigation state across page refreshes.
+    Generates Question #1 adaptively if not already present.
+    """
+    attempt = None
+    if req.resume:
+        attempt = db.query(AssessmentAttempt).filter(
+            AssessmentAttempt.student_id == current_user.id,
+            AssessmentAttempt.assessment_id == req.assessment_id,
+            AssessmentAttempt.status == "IN_PROGRESS"
+        ).order_by(AssessmentAttempt.started_at.desc()).first()
 
-    attempt = AssessmentAttempt(
-        student_id=current_user.id,
-        assessment_id=req.assessment_id,
-        assessment_type=req.assessment_type or "ADAPTIVE_QUIZ",
-        attempt_number=prev_attempts_count + 1,
-        status="IN_PROGRESS",
-        started_at=datetime.now(timezone.utc)
-    )
-    db.add(attempt)
+    if not attempt:
+        prev_attempts_count = db.query(AssessmentAttempt).filter(
+            AssessmentAttempt.student_id == current_user.id,
+            AssessmentAttempt.assessment_id == req.assessment_id
+        ).count()
+
+        attempt = AssessmentAttempt(
+            student_id=current_user.id,
+            assessment_id=req.assessment_id,
+            assessment_type=req.assessment_type or "ADAPTIVE_QUIZ",
+            attempt_number=prev_attempts_count + 1,
+            status="IN_PROGRESS",
+            current_question_index=1,
+            started_at=datetime.now(timezone.utc)
+        )
+        db.add(attempt)
+        db.commit()
+        db.refresh(attempt)
+
+        # Record ASSESSMENT_START integrity event
+        IntegrityService.record_integrity_event(
+            db=db,
+            student_id=current_user.id,
+            event_type="ASSESSMENT_START",
+            action="Assessment started",
+            details=f"Student started assessment '{req.assessment_id}' (Attempt #{attempt.attempt_number})",
+            risk_level="NORMAL",
+            source="ADAPTIVE_QUIZ",
+            assessment_id=attempt.assessment_id,
+            attempt_id=attempt.id
+        )
+
+    # Ensure Question #1 exists in question_attempts
+    qa1 = db.query(QuestionAttempt).filter(
+        QuestionAttempt.attempt_id == attempt.id,
+        QuestionAttempt.question_number == 1
+    ).first()
+
+    if not qa1:
+        q1_data = AdaptiveEngine.get_next_question(
+            db=db,
+            student_id=current_user.id,
+            course_id=req.course_id,
+            module_id=req.module_id,
+            concept_id=req.concept_id,
+            assessment_id=attempt.assessment_id,
+            attempt_id=attempt.id
+        )
+        if q1_data.get("question"):
+            q1_obj = q1_data["question"]
+            qa1 = QuestionAttempt(
+                student_id=current_user.id,
+                assessment_id=attempt.assessment_id,
+                attempt_id=attempt.id,
+                question_id=q1_obj["id"],
+                question_number=1,
+                visited=True,
+                answer_status="UNANSWERED",
+                selected_answer=None
+            )
+            db.add(qa1)
+            db.commit()
+            db.refresh(qa1)
+
+            # Record QUESTION_OPENED integrity event
+            IntegrityService.record_integrity_event(
+                db=db,
+                student_id=current_user.id,
+                event_type="QUESTION_OPENED",
+                action="Question opened",
+                details="Question #1 opened for first time",
+                risk_level="NORMAL",
+                source="ADAPTIVE_QUIZ",
+                assessment_id=attempt.assessment_id,
+                attempt_id=attempt.id,
+                question_id=q1_obj["id"],
+                question_number=1
+            )
+
+    return build_assessment_state_dict(attempt, db)
+
+@router.get("/assessments/{attempt_id}/state")
+def get_assessment_state(
+    attempt_id: int,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    """
+    Requirement 2: QUESTION STATE MANAGEMENT
+    Returns the complete assessment state, all questions, visited/answered status, and active question.
+    """
+    attempt = db.query(AssessmentAttempt).filter(AssessmentAttempt.id == attempt_id).first()
+    if not attempt:
+        raise HTTPException(status_code=404, detail="Assessment attempt not found")
+    if attempt.student_id != current_user.id and current_user.role != "trainer":
+        raise HTTPException(status_code=403, detail="Forbidden")
+
+    return build_assessment_state_dict(attempt, db)
+
+@router.post("/assessments/{attempt_id}/navigate")
+def navigate_assessment_question(
+    attempt_id: int,
+    req: QuestionNavigateRequest,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    """
+    Requirement 1: Revisit any previously viewed question.
+    """
+    attempt = db.query(AssessmentAttempt).filter(AssessmentAttempt.id == attempt_id).first()
+    if not attempt:
+        raise HTTPException(status_code=404, detail="Assessment attempt not found")
+    if attempt.student_id != current_user.id and current_user.role != "trainer":
+        raise HTTPException(status_code=403, detail="Forbidden")
+
+    target_qa = db.query(QuestionAttempt).filter(
+        QuestionAttempt.attempt_id == attempt.id,
+        QuestionAttempt.question_number == req.target_question_number
+    ).first()
+
+    if not target_qa:
+        raise HTTPException(status_code=404, detail=f"Question #{req.target_question_number} not found in this attempt")
+
+    ev_type = "QUESTION_REVISITED" if target_qa.visited else "QUESTION_OPENED"
+    target_qa.visited = True
+    attempt.current_question_index = req.target_question_number
     db.commit()
-    db.refresh(attempt)
 
-    return {
-        "attempt_id": attempt.id,
-        "assessment_id": attempt.assessment_id,
-        "attempt_number": attempt.attempt_number,
-        "status": attempt.status,
-        "started_at": attempt.started_at.isoformat()
-    }
+    IntegrityService.record_integrity_event(
+        db=db,
+        student_id=current_user.id,
+        event_type=ev_type,
+        action=f"Question #{req.target_question_number} {'revisited' if ev_type == 'QUESTION_REVISITED' else 'opened'}",
+        details=f"Navigated to Question #{req.target_question_number}",
+        risk_level="NORMAL",
+        source="ADAPTIVE_QUIZ",
+        assessment_id=attempt.assessment_id,
+        attempt_id=attempt.id,
+        question_id=target_qa.question_id,
+        question_number=target_qa.question_number
+    )
+
+    return build_assessment_state_dict(attempt, db)
+
+@router.post("/assessments/{attempt_id}/save-answer")
+def save_assessment_answer(
+    attempt_id: int,
+    req: QuestionAnswerRequest,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    """
+    Requirement 1 & 2:
+    Save or change selected answer for question.
+    Preserves answer in DB, marks changed if modified, and updates Bayesian student mastery.
+    """
+    attempt = db.query(AssessmentAttempt).filter(AssessmentAttempt.id == attempt_id).first()
+    if not attempt:
+        raise HTTPException(status_code=404, detail="Assessment attempt not found")
+    if attempt.student_id != current_user.id and current_user.role != "trainer":
+        raise HTTPException(status_code=403, detail="Forbidden")
+
+    qa_q = db.query(QuestionAttempt).filter(QuestionAttempt.attempt_id == attempt.id)
+    if req.question_number:
+        qa = qa_q.filter(QuestionAttempt.question_number == req.question_number).first()
+    elif req.question_id:
+        qa = qa_q.filter(QuestionAttempt.question_id == req.question_id).first()
+    else:
+        qa = qa_q.filter(QuestionAttempt.question_number == (attempt.current_question_index or 1)).first()
+
+    if not qa:
+        raise HTTPException(status_code=404, detail="Question not found")
+
+    old_ans = qa.selected_answer
+    new_ans = req.selected_answer.strip()
+
+    is_changed = False
+    if old_ans and old_ans.strip() != new_ans:
+        is_changed = True
+        qa.previous_answer = old_ans
+        qa.is_changed = True
+        qa.answer_status = "CHANGED"
+        ev_type = "ANSWER_CHANGED"
+        action = "Answer changed"
+        details = f"Changed Q#{req.question_number} answer from '{old_ans}' to '{new_ans}'"
+    else:
+        qa.answer_status = "ANSWERED"
+        ev_type = "ANSWER_SELECTED"
+        action = "Answer selected"
+        details = f"Selected Q#{req.question_number} answer: '{new_ans}'"
+
+    qa.selected_answer = new_ans
+    qa.submitted = True
+    qa.visited = True
+    qa.time_taken = (qa.time_taken or 0.0) + (req.time_taken or 0.0)
+
+    # Evaluate answer correctness
+    question = qa.question
+    is_correct = False
+    if question:
+        c_ans = question.correct_answer.strip().lower()
+        s_ans = new_ans.lower()
+        is_correct = (s_ans == c_ans)
+        if not is_correct and question.options:
+            opts = [o.strip().lower() for o in question.options]
+            if s_ans in opts and s_ans == c_ans:
+                is_correct = True
+
+    qa.is_correct = is_correct
+    qa.score = 1.0 if is_correct else 0.0
+
+    # Update AssessmentAttempt metrics
+    all_qa = db.query(QuestionAttempt).filter(QuestionAttempt.attempt_id == attempt.id).all()
+    attempt.questions_attempted = sum(1 for q in all_qa if q.selected_answer)
+    attempt.questions_correct = sum(1 for q in all_qa if q.is_correct is True)
+    attempt.score = round((attempt.questions_correct / max(1, attempt.questions_attempted) * 100), 1)
+
+    # Update academic StudentMastery using Bayesian logic
+    if question:
+        MasteryService.update_mastery(
+            db=db,
+            student_id=current_user.id,
+            concept_id=question.concept_id,
+            is_correct=is_correct,
+            difficulty=question.difficulty,
+            reason_detail=f"Assessment Q#{qa.question_number} answer",
+            time_taken=req.time_taken
+        )
+
+    # Record IntegrityEvent
+    IntegrityService.record_integrity_event(
+        db=db,
+        student_id=current_user.id,
+        event_type=ev_type,
+        action=action,
+        details=details,
+        risk_level="NORMAL",
+        source="ADAPTIVE_QUIZ",
+        assessment_id=attempt.assessment_id,
+        attempt_id=attempt.id,
+        question_id=qa.question_id,
+        question_number=qa.question_number
+    )
+
+    db.commit()
+    return build_assessment_state_dict(attempt, db)
+
+@router.post("/assessments/{attempt_id}/next-question")
+def next_assessment_question(
+    attempt_id: int,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    """
+    Requirement 1 & 3:
+    Move to the next question.
+    If next question already exists in this attempt, restores it.
+    If at the latest question, adaptively generates the next question using previous question performance.
+    """
+    attempt = db.query(AssessmentAttempt).filter(AssessmentAttempt.id == attempt_id).first()
+    if not attempt:
+        raise HTTPException(status_code=404, detail="Assessment attempt not found")
+    if attempt.student_id != current_user.id and current_user.role != "trainer":
+        raise HTTPException(status_code=403, detail="Forbidden")
+
+    curr_idx = attempt.current_question_index or 1
+    total_existing = db.query(QuestionAttempt).filter(QuestionAttempt.attempt_id == attempt.id).count()
+
+    if curr_idx < total_existing:
+        # Move forward to next already-generated question
+        attempt.current_question_index = curr_idx + 1
+        next_qa = db.query(QuestionAttempt).filter(
+            QuestionAttempt.attempt_id == attempt.id,
+            QuestionAttempt.question_number == attempt.current_question_index
+        ).first()
+        if next_qa:
+            next_qa.visited = True
+        db.commit()
+
+        IntegrityService.record_integrity_event(
+            db=db,
+            student_id=current_user.id,
+            event_type="QUESTION_REVISITED",
+            action=f"Next Question Q#{attempt.current_question_index}",
+            details=f"Moved to already generated question #{attempt.current_question_index}",
+            risk_level="NORMAL",
+            source="ADAPTIVE_QUIZ",
+            assessment_id=attempt.assessment_id,
+            attempt_id=attempt.id,
+            question_id=next_qa.question_id if next_qa else None,
+            question_number=attempt.current_question_index
+        )
+    else:
+        # Generate next question adaptively!
+        next_q_data = AdaptiveEngine.get_next_question(
+            db=db,
+            student_id=current_user.id,
+            assessment_id=attempt.assessment_id,
+            attempt_id=attempt.id
+        )
+
+        if not next_q_data.get("question"):
+            # All available questions completed
+            return {
+                **build_assessment_state_dict(attempt, db),
+                "all_completed": True,
+                "message": "All eligible adaptive questions completed for this assessment."
+            }
+
+        new_q_obj = next_q_data["question"]
+        new_q_num = total_existing + 1
+
+        new_qa = QuestionAttempt(
+            student_id=current_user.id,
+            assessment_id=attempt.assessment_id,
+            attempt_id=attempt.id,
+            question_id=new_q_obj["id"],
+            question_number=new_q_num,
+            visited=True,
+            answer_status="UNANSWERED",
+            selected_answer=None
+        )
+        db.add(new_qa)
+        attempt.current_question_index = new_q_num
+        db.commit()
+        db.refresh(new_qa)
+
+        IntegrityService.record_integrity_event(
+            db=db,
+            student_id=current_user.id,
+            event_type="QUESTION_OPENED",
+            action=f"Next Question Q#{new_q_num}",
+            details=f"Opened adaptive question #{new_q_num} ({new_q_obj.get('difficulty', 'MEDIUM')})",
+            risk_level="NORMAL",
+            source="ADAPTIVE_QUIZ",
+            assessment_id=attempt.assessment_id,
+            attempt_id=attempt.id,
+            question_id=new_q_obj["id"],
+            question_number=new_q_num
+        )
+
+    return build_assessment_state_dict(attempt, db)
+
+@router.post("/assessments/{attempt_id}/previous-question")
+def previous_assessment_question(
+    attempt_id: int,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    """
+    Requirement 1:
+    Move back to the previous question.
+    Restores Question state and previous selected answer.
+    """
+    attempt = db.query(AssessmentAttempt).filter(AssessmentAttempt.id == attempt_id).first()
+    if not attempt:
+        raise HTTPException(status_code=404, detail="Assessment attempt not found")
+    if attempt.student_id != current_user.id and current_user.role != "trainer":
+        raise HTTPException(status_code=403, detail="Forbidden")
+
+    curr_idx = attempt.current_question_index or 1
+    if curr_idx > 1:
+        attempt.current_question_index = curr_idx - 1
+        prev_qa = db.query(QuestionAttempt).filter(
+            QuestionAttempt.attempt_id == attempt.id,
+            QuestionAttempt.question_number == attempt.current_question_index
+        ).first()
+        if prev_qa:
+            prev_qa.visited = True
+        db.commit()
+
+        IntegrityService.record_integrity_event(
+            db=db,
+            student_id=current_user.id,
+            event_type="QUESTION_REVISITED",
+            action=f"Previous Question Q#{attempt.current_question_index}",
+            details=f"Returned to Question #{attempt.current_question_index} (Answer preserved: {prev_qa.selected_answer if prev_qa else 'None'})",
+            risk_level="NORMAL",
+            source="ADAPTIVE_QUIZ",
+            assessment_id=attempt.assessment_id,
+            attempt_id=attempt.id,
+            question_id=prev_qa.question_id if prev_qa else None,
+            question_number=attempt.current_question_index
+        )
+
+    return build_assessment_state_dict(attempt, db)
 
 @router.post("/assessments/{attempt_id}/finish")
 def finish_assessment_attempt(
@@ -710,10 +1172,16 @@ def finish_assessment_attempt(
     if attempt.student_id != current_user.id and current_user.role != "trainer":
         raise HTTPException(status_code=403, detail="Forbidden")
 
-    attempt.status = "COMPLETED"
-    attempt.ended_at = datetime.now(timezone.utc)
+    # Compute final score
+    all_qa = db.query(QuestionAttempt).filter(QuestionAttempt.attempt_id == attempt.id).all()
+    answered_qa = [q for q in all_qa if q.selected_answer]
+    attempt.questions_attempted = len(answered_qa)
+    attempt.questions_correct = sum(1 for q in answered_qa if q.is_correct is True)
     if attempt.questions_attempted > 0:
         attempt.score = round((attempt.questions_correct / attempt.questions_attempted * 100), 1)
+
+    attempt.status = "COMPLETED"
+    attempt.ended_at = datetime.now(timezone.utc)
 
     if attempt.risk_score >= 70.0 or attempt.warnings_count >= 3:
         attempt.risk_level = "HIGH_RISK"
@@ -723,6 +1191,19 @@ def finish_assessment_attempt(
         attempt.risk_level = "LOW_RISK"
     else:
         attempt.risk_level = "NORMAL"
+
+    # Record ASSESSMENT_COMPLETED integrity event
+    IntegrityService.record_integrity_event(
+        db=db,
+        student_id=current_user.id,
+        event_type="ASSESSMENT_COMPLETED",
+        action="Assessment completed",
+        details=f"Final score: {attempt.score}% ({attempt.questions_correct}/{attempt.questions_attempted} correct)",
+        risk_level=attempt.risk_level.replace("_RISK", ""),
+        source="ADAPTIVE_QUIZ",
+        assessment_id=attempt.assessment_id,
+        attempt_id=attempt.id
+    )
 
     db.commit()
     return {
@@ -735,6 +1216,19 @@ def finish_assessment_attempt(
         "risk_level": attempt.risk_level,
         "ended_at": attempt.ended_at.isoformat()
     }
+
+@router.get("/student/attempts/{attempt_id}/analysis")
+def get_attempt_analysis(
+    attempt_id: int,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    """
+    Requirement 11: PREVIOUS ATTEMPT -> ADAPTIVE LEARNING
+    Analyzes student's previous attempts while keeping Academic and Integrity separate.
+    """
+    return AdaptiveEngine.analyze_previous_attempts(db, current_user.id)
+
 
 @router.get("/student/attempts")
 def get_student_attempts(

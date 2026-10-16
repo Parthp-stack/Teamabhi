@@ -6,18 +6,17 @@ from backend.models.question import Question, Attempt
 from backend.models.mastery import StudentMastery, MasteryHistory
 from backend.models.coding import CodingProblem, TestCase, CodingSubmission
 from backend.models.session import Session, SessionEvent, CodeRevision
-from backend.models.integrity import IntegritySignal
+from backend.models.integrity import IntegritySignal, IntegrityEvent
 from backend.models.explanation import ExplanationQuestion, ExplanationAnswer
 from backend.models.ai_evaluation import AIEvaluation
-from backend.models.assessment_attempt import AssessmentAttempt, AssessmentWarning
+from backend.models.assessment_attempt import AssessmentAttempt, AssessmentWarning, QuestionAttempt, StudentConceptProgress
 
 # Entity aliases for database and curriculum flexibility
 Subject = Course
 Topic = Module
-QuestionAttempt = Attempt
 CodingAttempt = CodingSubmission
 CodingActivityEvent = SessionEvent
-IntegrityEvent = IntegritySignal
+
 
 __all__ = [
     "Base",
@@ -50,7 +49,8 @@ __all__ = [
     "ExplanationAnswer",
     "AIEvaluation",
     "AssessmentAttempt",
-    "AssessmentWarning"
+    "AssessmentWarning",
+    "StudentConceptProgress"
 ]
 
 

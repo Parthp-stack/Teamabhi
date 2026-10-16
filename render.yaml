@@ -1,0 +1,21 @@
+services:
+  # FastAPI Backend on Render
+  - type: web
+    name: adaptive-learning-backend
+    runtime: python
+    plan: free
+    buildCommand: pip install -r requirements.txt
+    startCommand: uvicorn backend.main:app --host 0.0.0.0 --port $PORT
+    envVars:
+      - key: DATABASE_URL
+        sync: false # Set to your Supabase Transaction Pooler URI in Render Dashboard
+      - key: JWT_SECRET
+        generateValue: true
+      - key: FRONTEND_URL
+        value: http://localhost:5173
+      - key: OPENROUTER_API_KEY
+        sync: false
+      - key: OPENROUTER_MODEL
+        value: nvidia/nemotron-3-ultra-550b-a55b:free
+      - key: SANDBOX_MODE
+        value: isolated_proc

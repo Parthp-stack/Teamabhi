@@ -213,6 +213,7 @@ export default function CodingAssessmentPage() {
       const isCtrlOrMeta = e.ctrlKey || e.metaKey || e.browserEvent?.ctrlKey || e.browserEvent?.metaKey;
       const isKeyC = e.code === 'KeyC' || e.browserEvent?.key === 'c' || e.browserEvent?.key === 'C';
       const isKeyV = e.code === 'KeyV' || e.browserEvent?.key === 'v' || e.browserEvent?.key === 'V';
+      const isKeyX = e.code === 'KeyX' || e.browserEvent?.key === 'x' || e.browserEvent?.key === 'X';
 
       if (isCtrlOrMeta && isKeyC) {
         const selection = editor.getSelection();
@@ -224,6 +225,19 @@ export default function CodingAssessmentPage() {
             end_column: selection.endColumn,
           } : null,
           metadata: { action: 'editor_internal_copy' },
+        });
+      }
+
+      if (isCtrlOrMeta && isKeyX) {
+        const selection = editor.getSelection();
+        recordEvent('CUT', {
+          codeLocation: selection ? {
+            start_line: selection.startLineNumber,
+            start_column: selection.startColumn,
+            end_line: selection.endLineNumber,
+            end_column: selection.endColumn,
+          } : null,
+          metadata: { action: 'editor_internal_cut' },
         });
       }
 

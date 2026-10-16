@@ -211,7 +211,7 @@ export function useSessionRecorder(sessionId, onIntegrityWarning = null) {
       }, 500);
     };
 
-    // Document-level clipboard copy listener
+    // Document-level clipboard listeners
     const handleDocumentCopy = () => {
       const selected = window.getSelection ? window.getSelection().toString() : '';
       recordEvent('COPY', {
@@ -221,6 +221,44 @@ export function useSessionRecorder(sessionId, onIntegrityWarning = null) {
           preview: selected ? selected.slice(0, 50) : '',
         },
       });
+    };
+
+    const handleDocumentCut = () => {
+      const selected = window.getSelection ? window.getSelection().toString() : '';
+      recordEvent('CUT', {
+        metadata: {
+          action: 'clipboard_cut',
+          deleted_character_count: selected ? selected.length : 0,
+        },
+      });
+    };
+
+    const handleDocumentPaste = (e) => {
+      let pastedText = '';
+      if (e.clipboardData && e.clipboardData.getData) {
+        pastedText = e.clipboardData.getData('text/plain') || '';
+      }
+      recordEvent('PASTE', {
+        insertedCount: pastedText.length,
+        metadata: {
+          action: 'clipboard_paste',
+          pasted_length: pastedText.length,
+          preview: pastedText ? pastedText.slice(0, 50) : '',
+        },
+      });
+    };
+
+    const handleKeyDown = (e) => {
+      const isCtrlOrMeta = e.ctrlKey || e.metaKey;
+      if (isCtrlOrMeta) {
+        if (e.key === 'c' || e.key === 'C') {
+          recordEvent('COPY', { metadata: { shortcut: 'Ctrl+C' } });
+        } else if (e.key === 'v' || e.key === 'V') {
+          recordEvent('PASTE', { metadata: { shortcut: 'Ctrl+V' } });
+        } else if (e.key === 'x' || e.key === 'X') {
+          recordEvent('CUT', { metadata: { shortcut: 'Ctrl+X' } });
+        }
+      }
     };
 
     // Check initial window proportion on session start
@@ -234,6 +272,9 @@ export function useSessionRecorder(sessionId, onIntegrityWarning = null) {
     document.addEventListener('fullscreenchange', handleFullscreenChange);
     window.addEventListener('resize', handleResize);
     document.addEventListener('copy', handleDocumentCopy);
+    document.addEventListener('cut', handleDocumentCut);
+    document.addEventListener('paste', handleDocumentPaste);
+    window.addEventListener('keydown', handleKeyDown);
 
     return () => {
       if (flushTimerRef.current) clearInterval(flushTimerRef.current);
@@ -246,6 +287,9 @@ export function useSessionRecorder(sessionId, onIntegrityWarning = null) {
       document.removeEventListener('fullscreenchange', handleFullscreenChange);
       window.removeEventListener('resize', handleResize);
       document.removeEventListener('copy', handleDocumentCopy);
+      document.removeEventListener('cut', handleDocumentCut);
+      document.removeEventListener('paste', handleDocumentPaste);
+      window.removeEventListener('keydown', handleKeyDown);
       // Final flush
       flushEvents();
     };

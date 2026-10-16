@@ -179,6 +179,55 @@ class AIService:
         ]
 
     @classmethod
+    async def explain_wrong_answer(
+        cls,
+        question_text: str,
+        concept: str,
+        selected_answer: str,
+        correct_answer: str,
+        base_explanation: Optional[str] = None
+    ) -> Dict[str, Any]:
+        """
+        Explains why a student's answer was incorrect, clearly highlights the concept the question is built upon,
+        and provides pedagogical reasoning.
+        """
+        system_prompt = (
+            "You are an encouraging computer science professor and AI tutor. "
+            "A student answered a question incorrectly. Explain why their selected answer is wrong, "
+            "clearly identify and explain the core concept the question is built upon, and give them a memorable takeaway. "
+            "Output strictly valid JSON with keys: 'verdict' ('Incorrect'), 'concept' (string), 'concept_breakdown' (string), "
+            "'why_selected_is_wrong' (string), 'why_correct_is_right' (string), 'pedagogical_tip' (string)."
+        )
+        user_prompt = (
+            f"Question: {question_text}\n"
+            f"Core Concept: {concept}\n"
+            f"Student's Incorrect Answer: {selected_answer}\n"
+            f"Correct Answer: {correct_answer}\n"
+            f"Base Explanation: {base_explanation or ''}"
+        )
+
+        raw = await cls._call_openrouter(system_prompt, user_prompt, temperature=0.2)
+        if raw:
+            try:
+                clean = re.sub(r"^```(?:json)?\s*", "", raw.strip())
+                clean = re.sub(r"\s*```$", "", clean)
+                data = json.loads(clean)
+                if "concept" in data and "why_selected_is_wrong" in data:
+                    return data
+            except Exception as e:
+                print(f"[AIService] explain_wrong_answer parse error: {e}")
+
+        # Deterministic pedagogical fallback
+        return {
+            "verdict": "Incorrect",
+            "concept": concept,
+            "concept_breakdown": f"This question is built on '{concept}'. In object-oriented design, {concept} defines structural contracts and behavior guarantees of your application.",
+            "why_selected_is_wrong": f"Your answer '{selected_answer}' does not fulfill the core guarantees of {concept}.",
+            "why_correct_is_right": f"'{correct_answer}' is correct because it directly addresses the definition and runtime requirements of {concept}.",
+            "pedagogical_tip": f"Review the foundational principles of {concept} before attempting the next question."
+        }
+
+    @classmethod
     def _fallback_generate_question(cls, concept: str, difficulty: str, question_type: str) -> Dict[str, Any]:
         """Deterministic question fallback for offline testing or without API key."""
         if question_type == "TRUE_FALSE":

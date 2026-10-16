@@ -4,6 +4,9 @@ from backend.models.course import Course
 from backend.models.concept import Concept
 from backend.models.question import Question, Attempt
 from backend.models.mastery import StudentMastery
+from backend.models.assessment_attempt import AssessmentAttempt, AssessmentWarning, QuestionAttempt
+from backend.models.integrity import IntegrityEvent
+from backend.models.coding import CodingSubmission
 from backend.services.mastery_service import MasteryService
 from backend.services.mcq_validation_service import MCQValidationService
 
@@ -73,19 +76,26 @@ class AdaptiveEngine:
         course_id: Optional[int] = None,
         module_id: Optional[int] = None,
         concept_id: Optional[int] = None,
-        assessment_id: Optional[int] = None
+        assessment_id: Optional[int] = None,
+        attempt_id: Optional[int] = None,
+        previous_concept: Optional[str] = None,
+        last_was_correct: Optional[bool] = None,
+        last_difficulty: Optional[str] = None,
+        consecutive_wrong: Optional[int] = None
     ) -> Dict[str, Any]:
         """
         Selects the next adaptive question based on:
-        1. Targeted topic/concept if specified (e.g. Practice Searching, Practice Binary Search)
+        1. Targeted topic/concept if specified
         2. Student's weakest eligible prerequisite or active weak concept
         3. Prior performance (wrong answer -> retry concept; repeated wrong -> simpler question; fast correct -> higher difficulty)
         4. Strict MCQ validation (no malformed or ambiguous questions enter active assessment)
-        5. Session history (prevents repeating already attempted questions)
+        5. Session history & questions already shown in this attempt (prevents repeats)
         """
         query = db.query(Concept).order_by(Concept.order_index.asc())
         if concept_id:
             query = query.filter(Concept.id == concept_id)
+        elif previous_concept:
+            query = query.filter(Concept.name.ilike(f"%{previous_concept}%"))
         elif module_id:
             query = query.filter(Concept.module_id == module_id)
         elif course_id:
@@ -107,8 +117,7 @@ class AdaptiveEngine:
         for c in all_concepts:
             score = mastery_map.get(c.id, 0.0)
             prereq_eval = cls.evaluate_prerequisites(c, mastery_map)
-            # If concept_id or module_id was directly selected for focused practice, permit practice
-            eligible = prereq_eval["eligible"] if not (concept_id or module_id) else True
+            eligible = prereq_eval["eligible"] if not (concept_id or module_id or previous_concept) else True
             status = MasteryService.get_concept_status(score, eligible)
 
             concept_candidates.append({
@@ -119,35 +128,60 @@ class AdaptiveEngine:
                 "status": status
             })
 
-        # Check recent attempts to see if student just got a question wrong
-        recent_attempt_query = db.query(Attempt).filter(Attempt.student_id == student_id)
-        if assessment_id:
-            recent_attempt_query = recent_attempt_query.filter(Attempt.assessment_id == assessment_id)
-        recent_attempt = recent_attempt_query.order_by(Attempt.created_at.desc()).first()
+        # Track questions already shown in this attempt / session to prevent repeats
+        session_attempted_ids = set()
+        last_qa = None
+        consecutive_wrong_count = consecutive_wrong if consecutive_wrong is not None else 0
+        recent_concept_id = None
+        recent_wrong = False
+        recent_correct = False
 
-        recent_concept_id = recent_attempt.question.concept_id if recent_attempt and recent_attempt.question else None
-        recent_wrong = (recent_attempt is not None and not recent_attempt.is_correct)
+        if last_was_correct is not None:
+            recent_correct = last_was_correct
+            recent_wrong = (not last_was_correct)
 
-        # Target selection:
-        # If student recently failed a concept and that concept is in our candidate pool, prioritize it!
+        if attempt_id:
+            qa_rows = db.query(QuestionAttempt).filter(
+                QuestionAttempt.attempt_id == attempt_id
+            ).order_by(QuestionAttempt.question_number.desc()).all()
+            for qa_item in qa_rows:
+                session_attempted_ids.add(qa_item.question_id)
+            if qa_rows:
+                last_qa = qa_rows[0]
+                recent_concept_id = last_qa.question.concept_id if last_qa.question else None
+                if last_was_correct is None:
+                    recent_wrong = (last_qa.is_correct is False)
+                    recent_correct = (last_qa.is_correct is True)
+                if recent_concept_id and consecutive_wrong is None:
+                    consecutive_wrong_count = sum(1 for q_att in qa_rows if q_att.question and q_att.question.concept_id == recent_concept_id and q_att.is_correct is False)
+
+        if not last_qa and last_was_correct is None:
+            recent_attempt_query = db.query(Attempt).filter(Attempt.student_id == student_id)
+            if assessment_id:
+                recent_attempt_query = recent_attempt_query.filter(Attempt.assessment_id == assessment_id)
+            recent_attempt = recent_attempt_query.order_by(Attempt.created_at.desc()).first()
+            if recent_attempt and recent_attempt.question:
+                recent_concept_id = recent_attempt.question.concept_id
+                recent_wrong = (recent_attempt.is_correct is False)
+                recent_correct = (recent_attempt.is_correct is True)
+
+        # Target concept selection:
         target_cand = None
         if recent_wrong and recent_concept_id:
             for cand in concept_candidates:
                 if cand["concept"].id == recent_concept_id:
                     target_cand = cand
-                    reason = f"Targeting reinforcement for '{cand['concept'].name}' after recent incorrect attempt."
+                    reason = f"Targeting reinforcement for '{cand['concept'].name}' after recent incorrect answer."
                     break
 
         if not target_cand:
-            # Find eligible concepts that have not reached full mastery (< 75%)
             unmastered_eligible = [
                 cand for cand in concept_candidates
                 if cand["eligible"] and cand["mastery"] < MASTERY_THRESHOLD
             ]
-
             if unmastered_eligible:
                 target_cand = min(unmastered_eligible, key=lambda x: x["mastery"])
-                reason = f"Prioritizing your weakest eligible concept ({target_cand['concept'].name}: {target_cand['mastery']:.0f}% mastery)."
+                reason = f"Prioritizing weakest eligible concept ({target_cand['concept'].name}: {target_cand['mastery']:.0f}% mastery)."
             else:
                 eligible_pool = [c for c in concept_candidates if c["eligible"]]
                 if eligible_pool:
@@ -160,29 +194,14 @@ class AdaptiveEngine:
         target_concept = target_cand["concept"]
         target_score = target_cand["mastery"]
 
-        # Check recent attempts on this specific concept to calibrate difficulty
-        concept_attempts = db.query(Attempt).join(Question).filter(
-            Attempt.student_id == student_id,
-            Question.concept_id == target_concept.id
-        ).order_by(Attempt.created_at.desc()).limit(3).all()
-
-        consecutive_wrong = sum(1 for a in concept_attempts if not a.is_correct)
-        last_att = concept_attempts[0] if concept_attempts else None
-        is_remedial = consecutive_wrong >= 2
-
         # Difficulty calibration:
-        # If repeated wrong (>= 2): force EASY and provide remedial focus
+        is_remedial = (consecutive_wrong_count >= 2)
         if is_remedial:
             preferred_diff = "EASY"
             reason += " Repeated mistakes detected; providing foundational question with pedagogical guidance."
-        elif last_att and last_att.is_correct and last_att.time_taken and last_att.time_taken < 30.0:
-            # Fast + Correct -> promote difficulty
-            preferred_diff = "HARD" if target_score >= 50.0 else "MEDIUM"
-            reason += " Strong fast performance on previous question; advancing to higher difficulty."
-        elif last_att and last_att.is_correct and last_att.time_taken and last_att.time_taken >= 60.0:
-            # Slow + Correct -> maintain steady difficulty
-            preferred_diff = "MEDIUM" if target_score >= 40.0 else "EASY"
-            reason += " Correct but deliberate response; reinforcing current competency level."
+        elif recent_correct and (last_difficulty == "EASY" or target_score >= 50.0):
+            preferred_diff = "HARD" if target_score >= 70.0 else "MEDIUM"
+            reason += " Strong performance on previous question; advancing difficulty."
         elif target_score < 40.0:
             preferred_diff = "EASY"
         elif target_score < 70.0:
@@ -190,7 +209,7 @@ class AdaptiveEngine:
         else:
             preferred_diff = "HARD"
 
-        # Fetch candidate questions for the target concept
+        # Fetch candidate questions for target concept
         answered_correct_ids = [
             a.question_id for a in db.query(Attempt.question_id).filter(
                 Attempt.student_id == student_id,
@@ -198,14 +217,14 @@ class AdaptiveEngine:
             ).all()
         ]
 
-        # Questions attempted by this student in this specific assessment session
-        session_attempted_ids = set()
-        if assessment_id:
+        if assessment_id and not attempt_id:
             session_attempt_rows = db.query(Attempt.question_id).filter(
                 Attempt.student_id == student_id,
                 Attempt.assessment_id == assessment_id
             ).all()
-            session_attempted_ids = {r[0] for r in session_attempt_rows}
+            for r in session_attempt_rows:
+                session_attempted_ids.add(r[0])
+
 
         available_questions = db.query(Question).filter(
             Question.concept_id == target_concept.id
@@ -336,3 +355,100 @@ class AdaptiveEngine:
             "concepts": concepts_data,
             "path": concepts_data
         }
+
+    @classmethod
+    def analyze_previous_attempts(
+        cls,
+        db: Session,
+        student_id: int,
+        course_id: Optional[int] = None
+    ) -> Dict[str, Any]:
+        """
+        Requirement 11: PREVIOUS ATTEMPT -> ADAPTIVE LEARNING
+        Analyzes student's previous attempts across:
+        - Weak concepts (< 50% mastery or low accuracy)
+        - Strong concepts (>= 75% mastery)
+        - Incorrect answers count
+        - Difficulty performance (EASY, MEDIUM, HARD accuracy)
+        - Coding performance (passed vs failed submissions)
+        - Integrity events evaluated separately
+        IMPORTANT: Academic knowledge weakness and Integrity events are maintained as separate dimensions!
+        """
+        concepts_query = db.query(Concept).order_by(Concept.order_index.asc())
+        if course_id:
+            concepts_query = concepts_query.join(Concept.module).filter(Concept.module.has(course_id=course_id))
+        all_concepts = concepts_query.all()
+
+        mastery_map = cls.get_student_mastery_map(db, student_id)
+        attempts = db.query(Attempt).filter(Attempt.student_id == student_id).all()
+        q_attempts = db.query(QuestionAttempt).filter(QuestionAttempt.student_id == student_id).all()
+        coding_subs = db.query(CodingSubmission).filter(CodingSubmission.student_id == student_id).all()
+
+        weak_concepts = []
+        strong_concepts = []
+        for c in all_concepts:
+            score = mastery_map.get(c.id, 0.0)
+            if score >= 75.0:
+                strong_concepts.append({"concept_id": c.id, "concept_name": c.name, "mastery": score})
+            elif score < 50.0:
+                weak_concepts.append({"concept_id": c.id, "concept_name": c.name, "mastery": score})
+
+        diff_stats = {
+            "EASY": {"total": 0, "correct": 0, "accuracy": 0.0},
+            "MEDIUM": {"total": 0, "correct": 0, "accuracy": 0.0},
+            "HARD": {"total": 0, "correct": 0, "accuracy": 0.0}
+        }
+        total_incorrect = 0
+        for a in attempts:
+            diff = (a.question.difficulty if a.question and a.question.difficulty else "MEDIUM").upper()
+            if diff in diff_stats:
+                diff_stats[diff]["total"] += 1
+                if a.is_correct:
+                    diff_stats[diff]["correct"] += 1
+                else:
+                    total_incorrect += 1
+
+        for d in diff_stats.values():
+            d["accuracy"] = round((d["correct"] / d["total"] * 100), 1) if d["total"] > 0 else 0.0
+
+        coding_passed = sum(1 for s in coding_subs if s.status == "PASSED")
+        coding_failed = len(coding_subs) - coding_passed
+
+        integ_events = db.query(IntegrityEvent).filter(IntegrityEvent.student_id == student_id).all()
+        asst_attempts = db.query(AssessmentAttempt).filter(AssessmentAttempt.student_id == student_id).all()
+
+        total_integ = len(integ_events)
+        total_warnings = sum(1 for e in integ_events if e.warning is not None and len(e.warning.strip()) > 0)
+        max_risk_level = "NORMAL"
+        for att in asst_attempts:
+            if att.risk_level == "HIGH_RISK":
+                max_risk_level = "HIGH"
+                break
+            elif att.risk_level == "MEDIUM_RISK" and max_risk_level != "HIGH":
+                max_risk_level = "MEDIUM"
+            elif att.risk_level == "LOW_RISK" and max_risk_level == "NORMAL":
+                max_risk_level = "LOW"
+
+        return {
+            "student_id": student_id,
+            "separation_guarantee": True,
+            "academic_performance": {
+                "weak_concepts": weak_concepts,
+                "strong_concepts": strong_concepts,
+                "incorrect_answers_count": total_incorrect,
+                "total_questions_attempted": len(attempts) + len(q_attempts),
+                "difficulty_performance": diff_stats,
+                "coding_submissions": {
+                    "total": len(coding_subs),
+                    "passed": coding_passed,
+                    "failed": coding_failed
+                }
+            },
+            "integrity_performance": {
+                "total_integrity_events": total_integ,
+                "warnings_count": total_warnings,
+                "risk_level": max_risk_level,
+                "note": "Integrity events are tracked independently and do not degrade academic mastery."
+            }
+        }
+

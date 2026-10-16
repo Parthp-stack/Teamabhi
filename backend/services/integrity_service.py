@@ -2,12 +2,15 @@ from sqlalchemy.orm import Session
 from datetime import datetime, timezone, timedelta
 from typing import List, Dict, Any, Optional, Tuple
 import numpy as np
+import json
 
 from backend.config import settings
 from backend.models.session import Session as CodingSession, SessionEvent, CodeRevision
-from backend.models.integrity import IntegritySignal
+from backend.models.integrity import IntegritySignal, IntegrityEvent
 from backend.models.assessment_attempt import AssessmentWarning, AssessmentAttempt
 from backend.models.user import User
+from backend.models.coding import CodingProblem
+
 
 class IntegrityService:
     @classmethod
@@ -274,6 +277,106 @@ class IntegrityService:
             db.flush()
             if rev:
                 rev.event_id = ev.id
+
+            # Save unified IntegrityEvent
+            mapped_type = ev.event_type
+            action_desc = ev.classification
+            details_str = ev.classification_reason
+            risk = "NORMAL"
+
+            if ev.event_type == "COPY":
+                mapped_type = "COPY / CTRL+C"
+                action_desc = "Code copied"
+                details_str = f"Code copied from editor ({ev.event_metadata.get('copied_length', 0) if ev.event_metadata else 0} chars)"
+                risk = "LOW"
+            elif ev.event_type == "PASTE":
+                mapped_type = "PASTE / CTRL+V"
+                action_desc = "Code pasted"
+                details_str = f"Code pasted (+{ev.inserted_character_count} chars)"
+                risk = "MEDIUM" if ev.inserted_character_count >= 80 else "LOW"
+            elif ev.event_type == "CUT":
+                mapped_type = "CUT / CTRL+X"
+                action_desc = "Code cut"
+                details_str = f"Code cut (-{ev.deleted_character_count} chars)"
+                risk = "LOW"
+            elif ev.event_type in ["TYPE", "KEYSTROKE"]:
+                mapped_type = "CODE_TYPED" if ev.review_status != "REVIEW_SUGGESTED" else "RAPID_INSERTION"
+                action_desc = "Code typed"
+                details_str = f"+{ev.inserted_character_count} characters inserted"
+                risk = "MEDIUM" if ev.review_status == "REVIEW_SUGGESTED" else "NORMAL"
+            elif ev.event_type == "DELETE":
+                mapped_type = "CODE_DELETED"
+                action_desc = "Code deleted"
+                details_str = f"Deleted {ev.deleted_character_count} characters"
+                risk = "NORMAL"
+            elif ev.event_type == "REPLACE":
+                mapped_type = "CODE_REPLACED"
+                action_desc = "Code replaced"
+                details_str = f"Replaced -{ev.deleted_character_count}/+{ev.inserted_character_count} characters"
+                risk = "MEDIUM" if ev.inserted_character_count >= 80 else "NORMAL"
+            elif ev.event_type == "RUN":
+                mapped_type = "CODE_RUN"
+                action_desc = "Test cases executed"
+                details_str = "Test cases executed in sandbox"
+                risk = "NORMAL"
+            elif ev.event_type == "SUBMIT":
+                mapped_type = "SUBMISSION"
+                action_desc = "Code submitted"
+                details_str = "Final assessment solution submitted"
+                risk = "NORMAL"
+            elif ev.event_type == "FOCUS":
+                mapped_type = "EDITOR_FOCUSED"
+                action_desc = "Editor focused"
+                details_str = "Editor gained focus"
+                risk = "NORMAL"
+            elif ev.event_type == "BLUR":
+                mapped_type = "EDITOR_UNFOCUSED"
+                action_desc = "Editor unfocused"
+                details_str = "Editor lost focus"
+                risk = "NORMAL"
+            elif ev.event_type in ["TAB_SWITCH", "VISIBILITY_CHANGE"]:
+                mapped_type = "TAB_SWITCH"
+                is_hidden = ev.event_metadata.get("hidden", True) if ev.event_metadata else True
+                action_desc = "Assessment tab hidden" if is_hidden else "Assessment tab visible"
+                details_str = "Application window became hidden" if is_hidden else "Application window became visible"
+                risk = "MEDIUM" if is_hidden else "LOW"
+            elif ev.event_type == "WINDOW_BLUR":
+                mapped_type = "WINDOW_BLUR"
+                action_desc = "Window lost focus"
+                details_str = "Window lost focus"
+                risk = "MEDIUM"
+            elif ev.event_type == "FULLSCREEN_EXIT":
+                mapped_type = "FULLSCREEN_EXIT"
+                action_desc = "Fullscreen exited"
+                details_str = "Assessment window exited fullscreen"
+                risk = "MEDIUM"
+            elif ev.event_type == "POSSIBLE_SPLIT_SCREEN":
+                mapped_type = "POSSIBLE_SPLIT_SCREEN"
+                action_desc = "Resize anomaly"
+                details_str = "Window proportion consistent with side-by-side view"
+                risk = "MEDIUM"
+            elif ev.event_type == "RESIZE_ANOMALY":
+                mapped_type = "RESIZE_ANOMALY"
+                action_desc = "Viewport resized"
+                details_str = "Window dimensions changed"
+                risk = "NORMAL"
+
+            meta_json = json.dumps(ev.event_metadata) if isinstance(ev.event_metadata, dict) else str(ev.event_metadata or "")
+            integ_event = IntegrityEvent(
+                student_id=student_id,
+                assessment_id=str(coding_session.assessment_id) if coding_session.assessment_id else None,
+                session_id=session_id,
+                question_id=None,
+                question_number=1,
+                event_type=mapped_type,
+                action=action_desc,
+                details=details_str,
+                risk_level=risk,
+                source="CODING_ASSESSMENT",
+                event_metadata=meta_json,
+                timestamp=ev.timestamp
+            )
+            db.add(integ_event)
 
         db.commit()
 
@@ -693,6 +796,25 @@ class IntegrityService:
                 db.commit()
             cls.update_session_review_status(db, session_id)
 
+        # Also save to unified IntegrityEvent table
+        integ_w = IntegrityEvent(
+            student_id=student_id,
+            assessment_id=str(assessment_id) if assessment_id else None,
+            attempt_id=attempt_id,
+            session_id=session_id,
+            question_number=None,
+            event_type=warning_type,
+            action=f"Warning #{warning_number} issued",
+            details=message,
+            risk_level=effective_severity,
+            warning=f"Warning #{warning_number}: {message}",
+            source="BROWSER" if not session_id else "CODING_ASSESSMENT",
+            event_metadata=json.dumps(evidence) if isinstance(evidence, dict) else str(evidence or {}),
+            timestamp=datetime.now(timezone.utc)
+        )
+        db.add(integ_w)
+        db.commit()
+
         return {
             "warning_id": warning_obj.id,
             "warning_number": warning_number,
@@ -703,3 +825,229 @@ class IntegrityService:
             "message": message,
             "timestamp": warning_obj.timestamp.isoformat()
         }
+
+    @classmethod
+    def record_integrity_event(
+        cls,
+        db: Session,
+        student_id: int,
+        event_type: str,
+        action: Optional[str] = None,
+        details: Optional[str] = None,
+        risk_level: Optional[str] = None,
+        warning: Optional[str] = None,
+        source: str = "ASSESSMENT",
+        assessment_id: Optional[str] = None,
+        attempt_id: Optional[int] = None,
+        session_id: Optional[int] = None,
+        question_id: Optional[int] = None,
+        question_number: Optional[int] = None,
+        metadata: Optional[Dict[str, Any]] = None
+    ) -> Dict[str, Any]:
+        """
+        Record any integrity event across Coding Assessment, Adaptive Assessment, or Browser Activity.
+        """
+        meta_dict = metadata or {}
+        norm_type = event_type.upper()
+
+        # Determine risk level if not explicitly provided
+        if not risk_level:
+            if "POSSIBLE_SPLIT_SCREEN" in norm_type or "FULLSCREEN_EXIT" in norm_type or "TAB_SWITCH" in norm_type or "WINDOW_BLUR" in norm_type or "PASTE" in norm_type:
+                risk_level = "MEDIUM"
+            elif "COPY" in norm_type or "FOCUS" in norm_type:
+                risk_level = "LOW"
+            else:
+                risk_level = "NORMAL"
+
+        # Determine progressive warning if applicable
+        warning_msg = warning
+        if risk_level in ["MEDIUM", "HIGH"] and not warning_msg:
+            q_prev = db.query(IntegrityEvent).filter(
+                IntegrityEvent.student_id == student_id,
+                IntegrityEvent.warning.isnot(None)
+            )
+            if attempt_id:
+                q_prev = q_prev.filter(IntegrityEvent.attempt_id == attempt_id)
+            prev_w_count = q_prev.count()
+            w_num = prev_w_count + 1
+            if w_num == 1:
+                warning_msg = f"Warning #1: Assessment environment interruption detected ({event_type}). Please remain in the assessment window."
+            else:
+                warning_msg = f"Warning #{w_num}: Continued environment interruptions recorded ({event_type}). Please keep the assessment tab active."
+
+        integ_event = IntegrityEvent(
+            student_id=student_id,
+            assessment_id=str(assessment_id) if assessment_id else None,
+            attempt_id=attempt_id,
+            session_id=session_id,
+            question_id=question_id,
+            question_number=question_number,
+            event_type=event_type,
+            action=action or event_type,
+            details=details or action or event_type,
+            risk_level=risk_level,
+            warning=warning_msg,
+            source=source,
+            event_metadata=json.dumps(meta_dict) if isinstance(meta_dict, dict) else str(meta_dict),
+            timestamp=datetime.now(timezone.utc)
+        )
+        db.add(integ_event)
+
+        # Update attempt risk score if attempt_id is provided
+        if attempt_id:
+            att = db.query(AssessmentAttempt).filter(AssessmentAttempt.id == attempt_id).first()
+            if att:
+                att.integrity_events_count += 1
+                if warning_msg:
+                    att.warnings_count += 1
+                att.risk_score = min(100.0, att.warnings_count * 25.0 + (10.0 if risk_level == "MEDIUM" else 25.0 if risk_level == "HIGH" else 0.0))
+                if att.risk_score >= 70.0:
+                    att.risk_level = "HIGH_RISK"
+                elif att.risk_score >= 40.0:
+                    att.risk_level = "MEDIUM_RISK"
+                elif att.risk_score > 0.0:
+                    att.risk_level = "LOW_RISK"
+
+        db.commit()
+        db.refresh(integ_event)
+
+        return {
+            "id": integ_event.id,
+            "student_id": integ_event.student_id,
+            "event_type": integ_event.event_type,
+            "action": integ_event.action,
+            "details": integ_event.details,
+            "risk_level": integ_event.risk_level,
+            "warning": integ_event.warning,
+            "question_number": integ_event.question_number,
+            "timestamp": integ_event.timestamp.isoformat()
+        }
+
+    @classmethod
+    def get_integrity_events_table(
+        cls,
+        db: Session,
+        student_id: Optional[int] = None,
+        assessment_id: Optional[str] = None,
+        attempt_id: Optional[int] = None,
+        event_type: Optional[str] = None,
+        risk_level: Optional[str] = None,
+        search: Optional[str] = None,
+        sort_by: str = "timestamp",
+        sort_order: str = "desc",
+        limit: int = 200,
+        offset: int = 0
+    ) -> Dict[str, Any]:
+        """
+        Fetches the complete Student Integrity table and DB-computed summary cards.
+        Supports sorting, filtering by student, assessment, attempt, event type, risk level, search, and chronological ordering.
+        """
+        query = db.query(IntegrityEvent).join(User, IntegrityEvent.student_id == User.id)
+
+        # Filters
+        if student_id:
+            query = query.filter(IntegrityEvent.student_id == student_id)
+        if assessment_id:
+            query = query.filter(IntegrityEvent.assessment_id == str(assessment_id))
+        if attempt_id:
+            query = query.filter(IntegrityEvent.attempt_id == attempt_id)
+        if event_type and event_type.upper() != "ALL":
+            query = query.filter(IntegrityEvent.event_type.ilike(f"%{event_type}%"))
+        if risk_level and risk_level.upper() != "ALL":
+            query = query.filter(IntegrityEvent.risk_level == risk_level.upper())
+        if search:
+            s = f"%{search}%"
+            query = query.filter(
+                User.name.ilike(s) |
+                User.email.ilike(s) |
+                IntegrityEvent.details.ilike(s) |
+                IntegrityEvent.action.ilike(s) |
+                IntegrityEvent.event_type.ilike(s)
+            )
+
+        # Sorting
+        if sort_by == "student_name":
+            order_col = User.name.desc() if sort_order == "desc" else User.name.asc()
+        elif sort_by == "risk_level":
+            order_col = IntegrityEvent.risk_level.desc() if sort_order == "desc" else IntegrityEvent.risk_level.asc()
+        elif sort_by == "event_type":
+            order_col = IntegrityEvent.event_type.desc() if sort_order == "desc" else IntegrityEvent.event_type.asc()
+        else:
+            order_col = IntegrityEvent.timestamp.desc() if sort_order == "desc" else IntegrityEvent.timestamp.asc()
+
+        total_filtered = query.count()
+        events = query.order_by(order_col).offset(offset).limit(limit).all()
+
+        # Summary query
+        base_summary_q = db.query(IntegrityEvent)
+        if student_id:
+            base_summary_q = base_summary_q.filter(IntegrityEvent.student_id == student_id)
+        if assessment_id:
+            base_summary_q = base_summary_q.filter(IntegrityEvent.assessment_id == str(assessment_id))
+        if attempt_id:
+            base_summary_q = base_summary_q.filter(IntegrityEvent.attempt_id == attempt_id)
+
+        all_evs = base_summary_q.all()
+
+        total_events = len(all_evs)
+        copy_events = sum(1 for e in all_evs if "COPY" in e.event_type.upper() or "CTRL+C" in e.event_type.upper())
+        paste_events = sum(1 for e in all_evs if "PASTE" in e.event_type.upper() or "CTRL+V" in e.event_type.upper())
+        tab_switches = sum(1 for e in all_evs if "TAB_SWITCH" in e.event_type.upper())
+        window_blur_events = sum(1 for e in all_evs if "WINDOW_BLUR" in e.event_type.upper())
+        fullscreen_exits = sum(1 for e in all_evs if "FULLSCREEN_EXIT" in e.event_type.upper())
+        possible_split_screen_events = sum(1 for e in all_evs if "POSSIBLE_SPLIT_SCREEN" in e.event_type.upper())
+        code_runs = sum(1 for e in all_evs if e.event_type.upper() in ["CODE_RUN", "RUN"])
+        submissions = sum(1 for e in all_evs if e.event_type.upper() in ["SUBMISSION", "SUBMIT"])
+        warnings_count = sum(1 for e in all_evs if e.warning is not None and len(e.warning.strip()) > 0)
+
+        calc_risk_score = min(100.0, warnings_count * 20.0 + possible_split_screen_events * 15.0 + tab_switches * 10.0 + paste_events * 5.0)
+        overall_risk = "NORMAL"
+        if calc_risk_score >= 70:
+            overall_risk = "HIGH"
+        elif calc_risk_score >= 40:
+            overall_risk = "MEDIUM"
+        elif calc_risk_score > 0:
+            overall_risk = "LOW"
+
+        rows = []
+        for e in events:
+            q_num_str = f"Q{e.question_number}" if e.question_number else "-"
+            att_no = e.attempt.attempt_number if e.attempt else (1 if e.session_id else "-")
+            asst_label = e.assessment_id or "Assessment"
+
+            rows.append({
+                "id": e.id,
+                "timestamp": e.timestamp.strftime("%H:%M:%S") if e.timestamp else "-",
+                "timestamp_full": e.timestamp.isoformat() if e.timestamp else None,
+                "student_name": e.student.name if e.student else "Student",
+                "student_id": e.student_id,
+                "assessment": asst_label,
+                "attempt_no": att_no,
+                "question_no": q_num_str,
+                "event_type": e.event_type,
+                "action": e.action or e.event_type,
+                "details": e.details or "-",
+                "risk_level": e.risk_level.title() if e.risk_level else "Normal",
+                "warning": e.warning or "-",
+                "source": e.source.replace("_", " ").title() if e.source else "Assessment"
+            })
+
+        return {
+            "summary": {
+                "total_events": total_events,
+                "copy_events": copy_events,
+                "paste_events": paste_events,
+                "tab_switches": tab_switches,
+                "window_blur_events": window_blur_events,
+                "fullscreen_exits": fullscreen_exits,
+                "possible_split_screen_events": possible_split_screen_events,
+                "code_runs": code_runs,
+                "submissions": submissions,
+                "warnings": warnings_count,
+                "risk_score": calc_risk_score,
+                "risk_level": overall_risk
+            },
+            "total": total_filtered,
+            "events": rows
+        }
+

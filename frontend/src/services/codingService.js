@@ -80,16 +80,53 @@ export const sessionService = {
 };
 
 export const assessmentService = {
-  async startAttempt(assessmentId, assessmentType = 'ADAPTIVE_QUIZ') {
+  async startAttempt(assessmentId, assessmentType = 'ADAPTIVE_QUIZ', options = {}) {
     const response = await api.post('/assessments/start', {
       assessment_id: String(assessmentId),
       assessment_type: assessmentType,
+      ...options,
     });
+    return response.data;
+  },
+
+  async getState(attemptId) {
+    const response = await api.get(`/assessments/${attemptId}/state`);
+    return response.data;
+  },
+
+  async navigate(attemptId, targetQuestionNumber) {
+    const response = await api.post(`/assessments/${attemptId}/navigate`, {
+      target_question_number: targetQuestionNumber,
+    });
+    return response.data;
+  },
+
+  async saveAnswer(attemptId, questionNumber, selectedAnswer, timeTaken = 0.0) {
+    const response = await api.post(`/assessments/${attemptId}/save-answer`, {
+      question_number: questionNumber,
+      selected_answer: selectedAnswer,
+      time_taken: timeTaken,
+    });
+    return response.data;
+  },
+
+  async nextQuestion(attemptId) {
+    const response = await api.post(`/assessments/${attemptId}/next-question`);
+    return response.data;
+  },
+
+  async previousQuestion(attemptId) {
+    const response = await api.post(`/assessments/${attemptId}/previous-question`);
     return response.data;
   },
 
   async finishAttempt(attemptId) {
     const response = await api.post(`/assessments/${attemptId}/finish`);
+    return response.data;
+  },
+
+  async getAttemptAnalysis(attemptId) {
+    const response = await api.get(`/student/attempts/${attemptId}/analysis`);
     return response.data;
   },
 
@@ -117,6 +154,23 @@ export const assessmentService = {
 };
 
 export const integrityService = {
+  // Requirement 4, 7, 8: Dedicated Student Integrity Table & Database Summary Cards
+  async getIntegrityEvents(params = {}) {
+    const response = await api.get('/integrity/events', { params });
+    return response.data;
+  },
+
+  async recordIntegrityEvent(eventData) {
+    const response = await api.post('/integrity/events', eventData);
+    return response.data;
+  },
+
+  async getIntegritySummary(studentId = null) {
+    const params = studentId ? { student_id: studentId } : {};
+    const response = await api.get('/integrity/summary', { params });
+    return response.data;
+  },
+
   async getDashboardSessions(params = {}) {
     const response = await api.get('/integrity/sessions', { params });
     return response.data;

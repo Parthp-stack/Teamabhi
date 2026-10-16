@@ -66,16 +66,12 @@ def run_assessment_migrations():
                         except Exception as e:
                             logger.warning(f"[Migration] Could not add '{col_name}' to 'coding_problems': {e}")
 
-            # 4. Create compatibility VIEWS for question_attempts, coding_activity_events, integrity_events
-            # This ensures any queries targeting these explicit table names resolve transparently!
-            try:
-                conn.execute(text("CREATE VIEW IF NOT EXISTS question_attempts AS SELECT * FROM attempts"))
-                conn.execute(text("CREATE VIEW IF NOT EXISTS coding_activity_events AS SELECT * FROM session_events"))
-                conn.execute(text("CREATE VIEW IF NOT EXISTS integrity_events AS SELECT * FROM integrity_signals"))
-                logger.info("[Migration] Compatibility views created.")
-            except Exception as e:
-                # Some databases or view setups may log, which is fine
-                logger.info(f"[Migration] View creation notice: {e}")
+            # 4. Create compatibility VIEW for coding_activity_events only if not a table
+            if "coding_activity_events" not in existing_tables:
+                try:
+                    conn.execute(text("CREATE VIEW IF NOT EXISTS coding_activity_events AS SELECT * FROM session_events"))
+                except Exception:
+                    pass
 
             # 5. Add helpful indexes if not already present
             indexes_to_create = [

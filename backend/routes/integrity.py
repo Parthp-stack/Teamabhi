@@ -16,11 +16,111 @@ from backend.schemas.integrity import (
     TrainerReviewRequest,
     IntegrityDashboardOverview
 )
+from pydantic import BaseModel
 from backend.utils.security import get_current_user
 from backend.services.integrity_service import IntegrityService
 from backend.services.replay_service import ReplayService
 
 router = APIRouter(prefix="/integrity", tags=["Coding Integrity & Activity Tracking"])
+
+class IntegrityEventCreateRequest(BaseModel):
+    event_type: str
+    action: Optional[str] = None
+    details: Optional[str] = None
+    risk_level: Optional[str] = None
+    warning: Optional[str] = None
+    source: Optional[str] = "ASSESSMENT"
+    assessment_id: Optional[str] = None
+    attempt_id: Optional[int] = None
+    session_id: Optional[int] = None
+    question_id: Optional[int] = None
+    question_number: Optional[int] = None
+    metadata: Optional[Dict[str, Any]] = None
+
+@router.get("/events")
+def get_integrity_events(
+    student_id: Optional[int] = Query(None),
+    assessment_id: Optional[str] = Query(None),
+    attempt_id: Optional[int] = Query(None),
+    event_type: Optional[str] = Query(None),
+    risk_level: Optional[str] = Query(None),
+    search: Optional[str] = Query(None),
+    sort_by: str = Query("timestamp"),
+    sort_order: str = Query("desc"),
+    limit: int = Query(200),
+    offset: int = Query(0),
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    """
+    Requirement 4, 7, 8:
+    Returns the complete Student Integrity table (12 columns) and top summary cards from the database.
+    """
+    filter_student_id = student_id
+    if current_user.role != UserRole.TRAINER.value:
+        filter_student_id = current_user.id
+
+    return IntegrityService.get_integrity_events_table(
+        db=db,
+        student_id=filter_student_id,
+        assessment_id=assessment_id,
+        attempt_id=attempt_id,
+        event_type=event_type,
+        risk_level=risk_level,
+        search=search,
+        sort_by=sort_by,
+        sort_order=sort_order,
+        limit=limit,
+        offset=offset
+    )
+
+@router.post("/events")
+def record_integrity_event_endpoint(
+    req: IntegrityEventCreateRequest,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    """
+    Requirement 5 & 6:
+    Ingests and records student integrity events from assessment or coding environment.
+    """
+    return IntegrityService.record_integrity_event(
+        db=db,
+        student_id=current_user.id,
+        event_type=req.event_type,
+        action=req.action,
+        details=req.details,
+        risk_level=req.risk_level,
+        warning=req.warning,
+        source=req.source or "ASSESSMENT",
+        assessment_id=req.assessment_id,
+        attempt_id=req.attempt_id,
+        session_id=req.session_id,
+        question_id=req.question_id,
+        question_number=req.question_number,
+        metadata=req.metadata
+    )
+
+@router.get("/summary")
+def get_integrity_summary(
+    student_id: Optional[int] = Query(None),
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    """
+    Requirement 8:
+    Returns database summary card counters for Student Integrity page.
+    """
+    filter_student_id = student_id
+    if current_user.role != UserRole.TRAINER.value:
+        filter_student_id = current_user.id
+
+    data = IntegrityService.get_integrity_events_table(
+        db=db,
+        student_id=filter_student_id,
+        limit=1
+    )
+    return data["summary"]
 
 def require_trainer(user: User = Depends(get_current_user)) -> User:
     if user.role != UserRole.TRAINER.value:
@@ -29,6 +129,7 @@ def require_trainer(user: User = Depends(get_current_user)) -> User:
             detail="Forbidden: This action requires trainer privileges"
         )
     return user
+
 
 @router.get("/sessions", response_model=IntegrityDashboardOverview)
 def get_integrity_dashboard_sessions(

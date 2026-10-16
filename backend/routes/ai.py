@@ -64,3 +64,28 @@ async def generate_practice(
         student_weak_areas=req.student_weak_areas
     )
     return {"concept": req.concept, "practice_questions": questions}
+
+class ExplainAnswerRequest(BaseModel):
+    question_text: str
+    concept: str
+    selected_answer: str
+    correct_answer: str
+    explanation: Optional[str] = None
+
+@router.post("/explain-answer")
+async def explain_answer(
+    req: ExplainAnswerRequest,
+    current_user: User = Depends(get_current_user)
+):
+    """
+    Analyzes student answer, provides explanation if incorrect, and identifies the core concept the question is built on.
+    """
+    res = await AIService.explain_wrong_answer(
+        question_text=req.question_text,
+        concept=req.concept,
+        selected_answer=req.selected_answer,
+        correct_answer=req.correct_answer,
+        base_explanation=req.explanation
+    )
+    return res
+

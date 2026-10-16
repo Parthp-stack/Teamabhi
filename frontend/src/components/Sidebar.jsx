@@ -75,6 +75,10 @@ export default function Sidebar() {
               <Code2 size={18} />
               Coding Assessment
             </NavLink>
+            <NavLink to="/student/integrity" style={linkStyle}>
+              <ShieldAlert size={18} />
+              Student Integrity
+            </NavLink>
           </nav>
         </div>
       )}
@@ -102,7 +106,7 @@ export default function Sidebar() {
             </NavLink>
             <NavLink to="/trainer/integrity" style={linkStyle}>
               <ShieldAlert size={18} />
-              Integrity Dashboard
+              Student Integrity
             </NavLink>
             <NavLink to="/trainer/curriculum" style={linkStyle}>
               <FolderTree size={18} />

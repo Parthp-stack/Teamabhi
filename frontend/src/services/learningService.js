@@ -134,6 +134,17 @@ export const aiService = {
     });
     return response.data;
   },
+
+  async explainAnswer(questionText, concept, selectedAnswer, correctAnswer, explanation = '') {
+    const response = await api.post('/ai/explain-answer', {
+      question_text: questionText,
+      concept,
+      selected_answer: selectedAnswer,
+      correct_answer: correctAnswer,
+      explanation,
+    });
+    return response.data;
+  },
 };
 
 export const trainerService = {

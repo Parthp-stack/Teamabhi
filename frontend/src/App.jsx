@@ -147,6 +147,14 @@ export default function App() {
             </AppLayout>
           }
         />
+        <Route
+          path="/student/integrity"
+          element={
+            <AppLayout>
+              <CodingIntegrityDashboard isStudentView={true} />
+            </AppLayout>
+          }
+        />
 
         {/* Trainer Routes */}
         <Route
