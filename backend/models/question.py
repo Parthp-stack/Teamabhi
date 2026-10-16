@@ -8,15 +8,19 @@ class Question(Base):
 
     id = Column(Integer, primary_key=True, index=True)
     concept_id = Column(Integer, ForeignKey("concepts.id"), nullable=False, index=True)
+    topic_id = Column(Integer, ForeignKey("modules.id"), nullable=True, index=True)
     question_text = Column(Text, nullable=False)
-    question_type = Column(String(50), nullable=False, default="MCQ") # MCQ, TRUE_FALSE, SHORT_ANSWER
+    question_type = Column(String(50), nullable=False, default="MCQ") # MCQ, TRUE_FALSE, SHORT_ANSWER, CODING, DEBUGGING, EXPLANATION, VIVA
     difficulty = Column(String(20), nullable=False, default="MEDIUM") # EASY, MEDIUM, HARD
+    language = Column(String(50), nullable=True, default="all") # python, cpp, c, java, javascript, all
+    code_snippet = Column(Text, nullable=True)
     options = Column(JSON, nullable=True) # list of choices for MCQ / TRUE_FALSE
     correct_answer = Column(Text, nullable=False)
     explanation = Column(Text, nullable=True)
     created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc))
 
     concept = relationship("Concept", back_populates="questions")
+    topic = relationship("Module")
     attempts = relationship("Attempt", back_populates="question", cascade="all, delete-orphan")
 
     # Compatibility aliases

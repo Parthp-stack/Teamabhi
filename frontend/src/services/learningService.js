@@ -2,8 +2,11 @@ import api from './api';
 
 export const learningService = {
   // Phase 2 Adaptive Question Endpoint
-  async getNextQuestion(courseId = null) {
-    const params = courseId ? { course_id: courseId } : {};
+  async getNextQuestion(courseId = null, moduleId = null, conceptId = null) {
+    const params = {};
+    if (courseId) params.course_id = courseId;
+    if (moduleId) params.module_id = moduleId;
+    if (conceptId) params.concept_id = conceptId;
     const response = await api.get('/questions/next', { params });
     return response.data;
   },
@@ -71,7 +74,30 @@ export const learningService = {
     const response = await api.get('/student/coding-history');
     return response.data;
   },
+
+  // Concept Breakdown (Subject -> Topic -> Concept -> Sub-concept)
+  async getConceptBreakdown(courseId = null, moduleId = null) {
+    const params = {};
+    if (courseId) params.course_id = courseId;
+    if (moduleId) params.module_id = moduleId;
+    const response = await api.get('/student/concept-breakdown', { params });
+    return response.data;
+  },
+
+  // Personalized Adaptive Learning Score
+  async getAdaptiveScore(courseId = null) {
+    const params = courseId ? { course_id: courseId } : {};
+    const response = await api.get('/student/adaptive-score', { params });
+    return response.data;
+  },
+
+  // AI Evaluations (Oral VIVA & Code Comprehension)
+  async getStudentAIEvaluations() {
+    const response = await api.get('/explanation/evaluations/student');
+    return response.data;
+  },
 };
+
 
 export const masteryService = learningService;
 

@@ -2,14 +2,23 @@ from sqlalchemy import create_engine
 from sqlalchemy.orm import declarative_base, sessionmaker
 from backend.config import settings
 
-# Determine database engine parameters based on database dialect
+# Determine and sanitize database engine URL and parameters
+db_url = settings.DATABASE_URL.strip()
+if db_url.startswith("postgres://"):
+    # SQLAlchemy 1.4+ / 2.0 requires postgresql:// instead of postgres://
+    db_url = "postgresql://" + db_url[len("postgres://"):]
+
 connect_args = {}
-if settings.DATABASE_URL.startswith("sqlite"):
+if db_url.startswith("sqlite"):
     connect_args = {"check_same_thread": False}
+elif "supabase.co" in db_url or "pooler.supabase.com" in db_url:
+    # Ensure SSL is enabled for Supabase hosted instances
+    if "sslmode" not in db_url:
+        connect_args = {"sslmode": "require"}
 
 try:
     engine = create_engine(
-        settings.DATABASE_URL,
+        db_url,
         connect_args=connect_args,
         pool_pre_ping=True
     )
@@ -17,9 +26,9 @@ try:
     with engine.connect() as conn:
         pass
 except Exception as e:
-    # If configured Postgres is not running or accessible, fallback to SQLite for local development
+    # If configured remote DB is not accessible, fallback to SQLite for local development
     fallback_url = "sqlite:///./adaptive_learning.db"
-    print(f"[Database] Notice: Could not connect to {settings.DATABASE_URL} ({e}). Falling back to local SQLite: {fallback_url}")
+    print(f"[Database] Notice: Could not connect to {db_url} ({e}). Falling back to local SQLite: {fallback_url}")
     engine = create_engine(
         fallback_url,
         connect_args={"check_same_thread": False}

@@ -1,4 +1,4 @@
-from sqlalchemy import Column, Integer, String, Text, ForeignKey
+from sqlalchemy import Column, Integer, String, Text, ForeignKey, JSON
 from sqlalchemy.orm import relationship
 from backend.database import Base
 
@@ -14,14 +14,21 @@ class Concept(Base):
 
     id = Column(Integer, primary_key=True, index=True)
     module_id = Column(Integer, ForeignKey("modules.id"), nullable=False, index=True)
+    parent_concept_id = Column(Integer, ForeignKey("concepts.id"), nullable=True, index=True)
     name = Column(String(100), nullable=False, index=True)
     description = Column(Text, nullable=True)
+    explanation = Column(Text, nullable=True)
+    examples = Column(JSON, nullable=True)
+    code_snippet = Column(Text, nullable=True)
     difficulty = Column(String(20), default="MEDIUM", nullable=False) # EASY, MEDIUM, HARD
     order_index = Column(Integer, default=0, nullable=False)
 
     module = relationship("Module", back_populates="concepts")
     questions = relationship("Question", back_populates="concept", cascade="all, delete-orphan")
     masteries = relationship("StudentMastery", back_populates="concept", cascade="all, delete-orphan")
+
+    # Parent / Sub-concept hierarchy
+    parent_concept = relationship("Concept", remote_side=[id], backref="sub_concepts")
 
     # Prerequisites relationship via ConceptPrerequisite
     prerequisites = relationship(
@@ -31,3 +38,4 @@ class Concept(Base):
         secondaryjoin=id == ConceptPrerequisite.prerequisite_id,
         backref="dependents"
     )
+

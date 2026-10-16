@@ -218,12 +218,191 @@ export default function ExplainCodePage() {
                 fontSize: '14px',
               }}
             >
-              {result.overall_understanding_score >= 7.0 ? 'Verified Consistent' : 'Pending Trainer Review'}
+              {result.overall_understanding_score >= 7.0 ? 'Verified Consistent' : 'Needs Reinforcement'}
             </div>
           </div>
 
+          {/* Requirement 7: 4-Tier Understanding Verdict Banner */}
+          {result.understanding_verdict && (
+            <div
+              style={{
+                backgroundColor:
+                  result.understanding_verdict.includes('poor understanding')
+                    ? result.understanding_verdict.includes('Correct code')
+                      ? '#fffbeb'
+                      : '#fef2f2'
+                    : '#f0fdf4',
+                border: `1.5px solid ${
+                  result.understanding_verdict.includes('poor understanding')
+                    ? result.understanding_verdict.includes('Correct code')
+                      ? '#fde68a'
+                      : '#fecaca'
+                    : '#bbf7d0'
+                }`,
+                borderRadius: '14px',
+                padding: '20px 24px',
+              }}
+            >
+              <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '6px' }}>
+                <Sparkles
+                  size={18}
+                  color={
+                    result.understanding_verdict.includes('poor understanding')
+                      ? '#d97706'
+                      : '#16a34a'
+                  }
+                />
+                <span
+                  style={{
+                    fontSize: '11px',
+                    fontWeight: 800,
+                    textTransform: 'uppercase',
+                    color:
+                      result.understanding_verdict.includes('poor understanding')
+                        ? '#92400e'
+                        : '#166534',
+                  }}
+                >
+                  AI Comprehension Verdict (Code + VIVA Evaluation)
+                </span>
+              </div>
+              <div
+                style={{
+                  fontSize: '20px',
+                  fontWeight: 800,
+                  color:
+                    result.understanding_verdict.includes('poor understanding')
+                      ? result.understanding_verdict.includes('Correct code')
+                        ? '#b45309'
+                        : '#b91c1c'
+                      : '#15803d',
+                }}
+              >
+                "{result.understanding_verdict}"
+              </div>
+              <p
+                style={{
+                  fontSize: '13px',
+                  color: '#475569',
+                  marginTop: '6px',
+                  marginBottom: 0,
+                  lineHeight: '1.5',
+                }}
+              >
+                {result.understanding_verdict === 'Correct code + understood'
+                  ? 'Your code passed validation test cases and your viva explanation demonstrated solid grasp of algorithmic logic, time/space complexity, and invariants.'
+                  : result.understanding_verdict === 'Correct code + poor understanding'
+                  ? 'The submitted code passed unit tests, but the oral explanation revealed gaps in understanding why this algorithm works or how its complexity scales.'
+                  : result.understanding_verdict === 'Wrong code + good conceptual understanding'
+                  ? 'Your solution had runtime or logical errors on test cases, yet your oral answers showed genuine comprehension of the underlying concepts.'
+                  : 'Both the code execution and the oral explanation require conceptual remediation before proceeding.'}
+              </p>
+            </div>
+          )}
+
+          {/* Strengths & Weaknesses Grid */}
+          {((result.detected_strengths && result.detected_strengths.length > 0) ||
+            (result.detected_weaknesses && result.detected_weaknesses.length > 0)) && (
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px' }}>
+              {/* Strengths */}
+              <div
+                style={{
+                  backgroundColor: '#ffffff',
+                  borderRadius: '12px',
+                  border: '1px solid #d1fae5',
+                  padding: '18px',
+                }}
+              >
+                <div style={{ fontSize: '13px', fontWeight: 800, color: '#065f46', marginBottom: '10px' }}>
+                  ✓ Demonstrated Strengths
+                </div>
+                {result.detected_strengths?.length > 0 ? (
+                  <ul style={{ margin: 0, paddingLeft: '18px', fontSize: '13px', color: '#1f2937', lineHeight: '1.6' }}>
+                    {result.detected_strengths.map((str, i) => (
+                      <li key={i}>{str}</li>
+                    ))}
+                  </ul>
+                ) : (
+                  <div style={{ fontSize: '12px', color: '#6b7280' }}>No specific strengths highlighted.</div>
+                )}
+              </div>
+
+              {/* Weaknesses */}
+              <div
+                style={{
+                  backgroundColor: '#ffffff',
+                  borderRadius: '12px',
+                  border: '1px solid #fed7aa',
+                  padding: '18px',
+                }}
+              >
+                <div style={{ fontSize: '13px', fontWeight: 800, color: '#9a3412', marginBottom: '10px' }}>
+                  ⚠ Areas for Reinforcement
+                </div>
+                {result.detected_weaknesses?.length > 0 ? (
+                  <ul style={{ margin: 0, paddingLeft: '18px', fontSize: '13px', color: '#1f2937', lineHeight: '1.6' }}>
+                    {result.detected_weaknesses.map((w, i) => (
+                      <li key={i}>{w}</li>
+                    ))}
+                  </ul>
+                ) : (
+                  <div style={{ fontSize: '12px', color: '#15803d' }}>No significant conceptual weaknesses detected!</div>
+                )}
+              </div>
+            </div>
+          )}
+
+          {/* Recommendations Banner */}
+          {(result.difficulty_recommendation || result.next_question_recommendation) && (
+            <div
+              style={{
+                backgroundColor: '#eff6ff',
+                borderRadius: '12px',
+                border: '1px solid #bfdbfe',
+                padding: '16px 20px',
+                display: 'flex',
+                justifyContent: 'space-between',
+                alignItems: 'center',
+              }}
+            >
+              <div>
+                <div style={{ fontSize: '11px', fontWeight: 800, color: '#1e40af', textTransform: 'uppercase' }}>
+                  Adaptive Learning Next Step
+                </div>
+                <div style={{ fontSize: '14px', fontWeight: 700, color: '#1e3a8a', marginTop: '2px' }}>
+                  {result.next_question_recommendation || 'Proceed with adaptive practice questions.'}
+                </div>
+                {result.difficulty_recommendation && (
+                  <div style={{ fontSize: '12px', color: '#3b82f6', marginTop: '2px' }}>
+                    Recommended Difficulty: <strong>{result.difficulty_recommendation}</strong>
+                  </div>
+                )}
+              </div>
+
+              <button
+                onClick={() => navigate('/student/learning')}
+                style={{
+                  padding: '8px 16px',
+                  backgroundColor: '#2563eb',
+                  color: '#ffffff',
+                  border: 'none',
+                  borderRadius: '8px',
+                  fontSize: '13px',
+                  fontWeight: 700,
+                  cursor: 'pointer',
+                  whiteSpace: 'nowrap',
+                }}
+              >
+                Start Recommended Practice →
+              </button>
+            </div>
+          )}
+
           {/* Detailed Question Evaluations */}
           <div style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
+            <h3 style={{ fontSize: '16px', fontWeight: 800, color: '#0f172a', margin: '8px 0 0 0' }}>
+              Detailed Question-by-Question Evaluation
+            </h3>
             {result.evaluated_answers?.map((ea, idx) => (
               <div
                 key={idx}

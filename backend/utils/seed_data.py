@@ -21,6 +21,8 @@ def seed_database(db: Session):
             if student_a and student_b:
                 seed_coding_and_integrity(db, student_a, student_b)
         seed_phase4_assessments_and_submissions(db)
+        from backend.utils.seed_data_structures import seed_data_structures_curriculum
+        seed_data_structures_curriculum(db)
         return
 
     print("[Seed Phase 2] Seeding initial database for Adaptive Learning & AI...")

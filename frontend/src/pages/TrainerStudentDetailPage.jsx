@@ -310,6 +310,101 @@ export default function TrainerStudentDetailPage() {
         )}
       </div>
 
+      {/* AI Concept & Viva Evaluations with 4-Tier Understanding Verdict */}
+      {data?.ai_evaluations && data.ai_evaluations.length > 0 && (
+        <div style={{ backgroundColor: '#ffffff', padding: '24px', borderRadius: '14px', border: '1px solid #e5e7eb' }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px' }}>
+            <div>
+              <h3 style={{ fontSize: '16px', fontWeight: 800, color: '#111827', margin: 0 }}>
+                AI VIVA Comprehension Evaluations & Diagnostics
+              </h3>
+              <p style={{ margin: '2px 0 0 0', fontSize: '12px', color: '#64748b' }}>
+                Oral defense evaluation records with algorithmic understanding verdicts and prerequisite calibration
+              </p>
+            </div>
+            <Sparkles size={18} color="#4f46e5" />
+          </div>
+
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
+            {data.ai_evaluations.map((ev) => {
+              const isPoor = ev.understanding_verdict?.includes('poor understanding');
+              const isWrongCode = ev.understanding_verdict?.includes('Wrong code');
+              const verdictBg = isPoor
+                ? isWrongCode
+                  ? '#fee2e2'
+                  : '#fef3c7'
+                : '#dcfce7';
+              const verdictColor = isPoor
+                ? isWrongCode
+                  ? '#991b1b'
+                  : '#92400e'
+                : '#166534';
+
+              return (
+                <div
+                  key={ev.id}
+                  style={{
+                    padding: '16px',
+                    borderRadius: '10px',
+                    border: '1px solid #e2e8f0',
+                    backgroundColor: '#f8fafc',
+                  }}
+                >
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px' }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                      <span style={{ fontWeight: 800, fontSize: '14px', color: '#0f172a' }}>
+                        Concept: {ev.concept_name || `Concept #${ev.concept_id}`}
+                      </span>
+                      {ev.understanding_verdict && (
+                        <span
+                          style={{
+                            fontSize: '11px',
+                            fontWeight: 800,
+                            padding: '3px 8px',
+                            borderRadius: '4px',
+                            backgroundColor: verdictBg,
+                            color: verdictColor,
+                          }}
+                        >
+                          {ev.understanding_verdict}
+                        </span>
+                      )}
+                    </div>
+                    <span style={{ fontWeight: 800, color: '#4f46e5', fontSize: '14px' }}>
+                      Viva Score: {ev.score?.toFixed(1)} / 10
+                    </span>
+                  </div>
+
+                  {ev.feedback && (
+                    <div style={{ fontSize: '13px', color: '#334155', marginBottom: '8px', lineHeight: '1.4' }}>
+                      {ev.feedback}
+                    </div>
+                  )}
+
+                  <div style={{ display: 'flex', gap: '14px', flexWrap: 'wrap', fontSize: '12px', marginTop: '6px' }}>
+                    {ev.detected_strengths && ev.detected_strengths.length > 0 && (
+                      <div style={{ color: '#166534' }}>
+                        <strong>Strengths:</strong> {ev.detected_strengths.join(', ')}
+                      </div>
+                    )}
+                    {ev.detected_weaknesses && ev.detected_weaknesses.length > 0 && (
+                      <div style={{ color: '#b91c1c' }}>
+                        <strong>Weaknesses:</strong> {ev.detected_weaknesses.join(', ')}
+                      </div>
+                    )}
+                    {ev.difficulty_recommendation && (
+                      <div style={{ color: '#2563eb' }}>
+                        <strong>Recommended Difficulty:</strong> {ev.difficulty_recommendation}
+                      </div>
+                    )}
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      )}
+
       {/* Recorded Sessions & Integrity Dashboard Link (Section 9 & 10) */}
       <div style={{ backgroundColor: '#ffffff', padding: '24px', borderRadius: '14px', border: '1px solid #e5e7eb' }}>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px' }}>

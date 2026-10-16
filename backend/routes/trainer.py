@@ -309,6 +309,28 @@ def get_student_deep_dive(
         for s in sessions
     ]
 
+    # AI Evaluations
+    from backend.models.ai_evaluation import AIEvaluation
+    ai_evals = db.query(AIEvaluation).filter(
+        AIEvaluation.student_id == student_id
+    ).order_by(AIEvaluation.timestamp.desc()).all()
+
+    ai_eval_data = [
+        {
+            "id": ae.id,
+            "submission_id": ae.submission_id,
+            "score": ae.score,
+            "understanding_verdict": ae.understanding_verdict,
+            "feedback": ae.feedback,
+            "detected_strengths": ae.detected_strengths or [],
+            "detected_weaknesses": ae.detected_weaknesses or [],
+            "difficulty_recommendation": ae.difficulty_recommendation,
+            "next_question_recommendation": ae.next_question_recommendation,
+            "timestamp": ae.timestamp.isoformat() if ae.timestamp else None
+        }
+        for ae in ai_evals
+    ]
+
     return {
         "student": {
             "id": student.id,
@@ -323,7 +345,8 @@ def get_student_deep_dive(
         "history": history,
         "quiz_attempts": attempts_data,
         "submissions": submissions_data,
-        "sessions": sessions_data
+        "sessions": sessions_data,
+        "ai_evaluations": ai_eval_data
     }
 
 # ==========================================

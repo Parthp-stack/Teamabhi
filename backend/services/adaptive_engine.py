@@ -1,5 +1,6 @@
 from sqlalchemy.orm import Session
 from typing import Dict, Any, Optional, List
+from backend.models.course import Course
 from backend.models.concept import Concept
 from backend.models.question import Question, Attempt
 from backend.models.mastery import StudentMastery
@@ -68,19 +69,32 @@ class AdaptiveEngine:
         cls,
         db: Session,
         student_id: int,
-        course_id: Optional[int] = None
+        course_id: Optional[int] = None,
+        module_id: Optional[int] = None,
+        concept_id: Optional[int] = None
     ) -> Dict[str, Any]:
         """
-        Selects the next adaptive question based on the student's weakest eligible prerequisite.
-        Does NOT follow a static sequence.
+        Selects the next adaptive question based on:
+        1. Targeted topic/concept if specified (e.g. Practice Searching, Practice Binary Search)
+        2. Student's weakest eligible prerequisite or active weak concept
+        3. Prior performance (wrong answer -> retry concept; repeated wrong -> simpler question; fast correct -> higher difficulty)
         """
         query = db.query(Concept).order_by(Concept.order_index.asc())
-        if course_id:
+        if concept_id:
+            query = query.filter(Concept.id == concept_id)
+        elif module_id:
+            query = query.filter(Concept.module_id == module_id)
+        elif course_id:
             query = query.join(Concept.module).filter(Concept.module.has(course_id=course_id))
+        else:
+            first_course = db.query(Course).order_by(Course.id.asc()).first()
+            if first_course:
+                query = query.join(Concept.module).filter(Concept.module.has(course_id=first_course.id))
+
         all_concepts: List[Concept] = query.all()
 
         if not all_concepts:
-            return {"status": "NO_CONCEPTS", "message": "No concepts registered in course."}
+            return {"status": "NO_CONCEPTS", "message": "No concepts registered for this criteria."}
 
         mastery_map = cls.get_student_mastery_map(db, student_id)
 
@@ -89,42 +103,81 @@ class AdaptiveEngine:
         for c in all_concepts:
             score = mastery_map.get(c.id, 0.0)
             prereq_eval = cls.evaluate_prerequisites(c, mastery_map)
-            status = MasteryService.get_concept_status(score, prereq_eval["eligible"])
+            # If concept_id or module_id was directly selected for focused practice, permit practice
+            eligible = prereq_eval["eligible"] if not (concept_id or module_id) else True
+            status = MasteryService.get_concept_status(score, eligible)
 
             concept_candidates.append({
                 "concept": c,
                 "mastery": score,
-                "eligible": prereq_eval["eligible"],
+                "eligible": eligible,
                 "blocking": prereq_eval["blocking_prereqs"],
                 "status": status
             })
 
-        # Find eligible concepts that have not reached full mastery (< 75%)
-        unmastered_eligible = [
-            cand for cand in concept_candidates
-            if cand["eligible"] and cand["mastery"] < MASTERY_THRESHOLD
-        ]
+        # Check recent attempts to see if student just got a question wrong
+        recent_attempt = db.query(Attempt).filter(
+            Attempt.student_id == student_id
+        ).order_by(Attempt.created_at.desc()).first()
+
+        recent_concept_id = recent_attempt.question.concept_id if recent_attempt and recent_attempt.question else None
+        recent_wrong = (recent_attempt is not None and not recent_attempt.is_correct)
 
         # Target selection:
-        # If there are unmastered eligible concepts, select the one with the LOWEST mastery (weakest eligible)
-        if unmastered_eligible:
-            target_cand = min(unmastered_eligible, key=lambda x: x["mastery"])
-            reason = f"This is currently one of your weakest eligible concepts ({target_cand['concept'].name}: {target_cand['mastery']:.0f}% mastery). All prerequisites have met the {PREREQUISITE_THRESHOLD:.0f}% threshold."
-        else:
-            # If all eligible are mastered, check if any concept is still eligible or choose lowest
-            eligible_pool = [c for c in concept_candidates if c["eligible"]]
-            if eligible_pool:
-                target_cand = min(eligible_pool, key=lambda x: x["mastery"])
-                reason = f"Reinforcement practice on eligible concept '{target_cand['concept'].name}'."
+        # If student recently failed a concept and that concept is in our candidate pool, prioritize it!
+        target_cand = None
+        if recent_wrong and recent_concept_id:
+            for cand in concept_candidates:
+                if cand["concept"].id == recent_concept_id:
+                    target_cand = cand
+                    reason = f"Targeting reinforcement for '{cand['concept'].name}' after recent incorrect attempt."
+                    break
+
+        if not target_cand:
+            # Find eligible concepts that have not reached full mastery (< 75%)
+            unmastered_eligible = [
+                cand for cand in concept_candidates
+                if cand["eligible"] and cand["mastery"] < MASTERY_THRESHOLD
+            ]
+
+            if unmastered_eligible:
+                target_cand = min(unmastered_eligible, key=lambda x: x["mastery"])
+                reason = f"Prioritizing your weakest eligible concept ({target_cand['concept'].name}: {target_cand['mastery']:.0f}% mastery)."
             else:
-                target_cand = concept_candidates[0]
-                reason = "Beginning initial module prerequisites."
+                eligible_pool = [c for c in concept_candidates if c["eligible"]]
+                if eligible_pool:
+                    target_cand = min(eligible_pool, key=lambda x: x["mastery"])
+                    reason = f"Reinforcement practice on eligible concept '{target_cand['concept'].name}'."
+                else:
+                    target_cand = concept_candidates[0]
+                    reason = "Beginning initial module prerequisites."
 
         target_concept = target_cand["concept"]
         target_score = target_cand["mastery"]
 
-        # Select appropriate question difficulty based on current concept score
-        if target_score < 40.0:
+        # Check recent attempts on this specific concept to calibrate difficulty
+        concept_attempts = db.query(Attempt).join(Question).filter(
+            Attempt.student_id == student_id,
+            Question.concept_id == target_concept.id
+        ).order_by(Attempt.created_at.desc()).limit(3).all()
+
+        consecutive_wrong = sum(1 for a in concept_attempts if not a.is_correct)
+        last_att = concept_attempts[0] if concept_attempts else None
+
+        # Difficulty calibration:
+        # If repeated wrong (>= 2): force EASY and provide remedial focus
+        if consecutive_wrong >= 2:
+            preferred_diff = "EASY"
+            reason += " Repeated mistakes detected; providing foundational question with pedagogical guidance."
+        elif last_att and last_att.is_correct and last_att.time_taken and last_att.time_taken < 30.0:
+            # Fast + Correct -> promote difficulty
+            preferred_diff = "HARD" if target_score >= 50.0 else "MEDIUM"
+            reason += " Strong fast performance on previous question; advancing to higher difficulty."
+        elif last_att and last_att.is_correct and last_att.time_taken and last_att.time_taken >= 60.0:
+            # Slow + Correct -> maintain steady difficulty
+            preferred_diff = "MEDIUM" if target_score >= 40.0 else "EASY"
+            reason += " Correct but deliberate response; reinforcing current competency level."
+        elif target_score < 40.0:
             preferred_diff = "EASY"
         elif target_score < 70.0:
             preferred_diff = "MEDIUM"
@@ -132,7 +185,6 @@ class AdaptiveEngine:
             preferred_diff = "HARD"
 
         # Fetch candidate questions for the target concept
-        # Prioritize questions the student has not yet answered correctly
         answered_correct_ids = [
             a.question_id for a in db.query(Attempt.question_id).filter(
                 Attempt.student_id == student_id,
@@ -162,30 +214,45 @@ class AdaptiveEngine:
 
         selected_q = pool[0]
 
-        # Format response as requested in Section 4
-        # Notice: correct_answer and explanation are deliberately omitted before answer submission!
         return {
             "concept": target_concept.name,
             "concept_id": target_concept.id,
+            "topic_id": target_concept.module_id,
+            "topic_name": target_concept.module.title if target_concept.module else "",
             "current_mastery": target_score,
+            "status": target_cand["status"],
             "reason": reason,
+            "concept_explanation": target_concept.explanation,
+            "concept_code_snippet": target_concept.code_snippet,
             "question": {
                 "id": selected_q.id,
                 "concept_id": selected_q.concept_id,
+                "topic_id": selected_q.topic_id,
                 "concept_name": target_concept.name,
                 "question_text": selected_q.question_text,
                 "question_type": selected_q.question_type,
                 "difficulty": selected_q.difficulty,
+                "language": selected_q.language,
+                "code_snippet": selected_q.code_snippet,
                 "options": selected_q.options
             }
         }
 
+
     @classmethod
-    def get_learning_path(cls, db: Session, student_id: int) -> Dict[str, Any]:
+    def get_learning_path(cls, db: Session, student_id: int, course_id: Optional[int] = None) -> Dict[str, Any]:
         """
         Computes the student's adaptive learning path overview as specified in Section 5.
         """
-        all_concepts = db.query(Concept).order_by(Concept.order_index.asc()).all()
+        query = db.query(Concept).order_by(Concept.order_index.asc())
+        if course_id:
+            query = query.join(Concept.module).filter(Concept.module.has(course_id=course_id))
+        else:
+            first_course = db.query(Course).order_by(Course.id.asc()).first()
+            if first_course:
+                query = query.join(Concept.module).filter(Concept.module.has(course_id=first_course.id))
+
+        all_concepts = query.all()
         mastery_map = cls.get_student_mastery_map(db, student_id)
 
         completed_concepts = []
@@ -219,7 +286,7 @@ class AdaptiveEngine:
         avg_mastery = round(total_score / len(all_concepts), 1) if all_concepts else 0.0
 
         # Compute current target
-        next_act = cls.get_next_question(db, student_id)
+        next_act = cls.get_next_question(db, student_id, course_id=course_id)
         current_concept = next_act.get("concept", all_concepts[0].name if all_concepts else "None")
         target_score = next_act.get("current_mastery", 0.0)
         reason = next_act.get("reason", "Weak prerequisite")

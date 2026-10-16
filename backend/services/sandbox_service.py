@@ -264,6 +264,143 @@ class SandboxService:
                     "execution_time": round(elapsed, 3),
                     "memory_used": 12.0
                 }
+            elif language in ["c"]:
+                gcc = shutil.which("gcc") or shutil.which("clang")
+                if not gcc:
+                    return {
+                        "status": "COMPILE_ERROR",
+                        "stdout": "",
+                        "stderr": "C compiler (gcc) not found on host system.",
+                        "execution_time": 0.0,
+                        "memory_used": 0.0
+                    }
+
+                src_file = os.path.join(temp_dir, "solution.c")
+                out_file = os.path.join(temp_dir, "solution.exe" if sys.platform == "win32" else "solution")
+                with open(src_file, "w", encoding="utf-8") as f:
+                    f.write(source_code)
+
+                comp_proc = subprocess.run(
+                    [gcc, "-O2", src_file, "-o", out_file],
+                    capture_output=True,
+                    text=True,
+                    timeout=5.0
+                )
+                if comp_proc.returncode != 0:
+                    return {
+                        "status": "COMPILE_ERROR",
+                        "stdout": "",
+                        "stderr": comp_proc.stderr,
+                        "execution_time": 0.0,
+                        "memory_used": 0.0
+                    }
+
+                run_proc = subprocess.run(
+                    [out_file],
+                    input=stdin_data,
+                    text=True,
+                    capture_output=True,
+                    cwd=temp_dir,
+                    timeout=timeout
+                )
+                elapsed = time.perf_counter() - start_t
+                status = "PASSED" if run_proc.returncode == 0 else "RUNTIME_ERROR"
+                return {
+                    "status": status,
+                    "stdout": run_proc.stdout,
+                    "stderr": run_proc.stderr,
+                    "execution_time": round(elapsed, 3),
+                    "memory_used": 10.0
+                }
+
+            elif language in ["javascript", "js"]:
+                node = shutil.which("node")
+                if not node:
+                    return {
+                        "status": "RUNTIME_ERROR",
+                        "stdout": "",
+                        "stderr": "Node.js runtime not found on host system.",
+                        "execution_time": 0.0,
+                        "memory_used": 0.0
+                    }
+
+                src_file = os.path.join(temp_dir, "solution.js")
+                with open(src_file, "w", encoding="utf-8") as f:
+                    f.write(source_code)
+
+                run_proc = subprocess.run(
+                    [node, src_file],
+                    input=stdin_data,
+                    text=True,
+                    capture_output=True,
+                    cwd=temp_dir,
+                    timeout=timeout
+                )
+                elapsed = time.perf_counter() - start_t
+                status = "PASSED" if run_proc.returncode == 0 else "RUNTIME_ERROR"
+                return {
+                    "status": status,
+                    "stdout": run_proc.stdout,
+                    "stderr": run_proc.stderr,
+                    "execution_time": round(elapsed, 3),
+                    "memory_used": 28.5
+                }
+
+            elif language in ["java"]:
+                javac = shutil.which("javac")
+                java_bin = shutil.which("java")
+                if not javac or not java_bin:
+                    return {
+                        "status": "COMPILE_ERROR",
+                        "stdout": "",
+                        "stderr": "Java SDK (javac / java) not found on host system.",
+                        "execution_time": 0.0,
+                        "memory_used": 0.0
+                    }
+
+                # Detect class name or default to Solution
+                import re
+                class_match = re.search(r'public\s+class\s+(\w+)', source_code)
+                class_name = class_match.group(1) if class_match else "Solution"
+
+                src_file = os.path.join(temp_dir, f"{class_name}.java")
+                with open(src_file, "w", encoding="utf-8") as f:
+                    f.write(source_code)
+
+                comp_proc = subprocess.run(
+                    [javac, src_file],
+                    capture_output=True,
+                    text=True,
+                    timeout=6.0,
+                    cwd=temp_dir
+                )
+                if comp_proc.returncode != 0:
+                    return {
+                        "status": "COMPILE_ERROR",
+                        "stdout": "",
+                        "stderr": comp_proc.stderr,
+                        "execution_time": 0.0,
+                        "memory_used": 0.0
+                    }
+
+                run_proc = subprocess.run(
+                    [java_bin, class_name],
+                    input=stdin_data,
+                    text=True,
+                    capture_output=True,
+                    cwd=temp_dir,
+                    timeout=timeout
+                )
+                elapsed = time.perf_counter() - start_t
+                status = "PASSED" if run_proc.returncode == 0 else "RUNTIME_ERROR"
+                return {
+                    "status": status,
+                    "stdout": run_proc.stdout,
+                    "stderr": run_proc.stderr,
+                    "execution_time": round(elapsed, 3),
+                    "memory_used": 35.0
+                }
+
             else:
                 return {
                     "status": "UNSUPPORTED_LANGUAGE",

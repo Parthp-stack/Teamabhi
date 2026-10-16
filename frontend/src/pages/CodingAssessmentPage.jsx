@@ -16,7 +16,8 @@ import {
   ShieldCheck,
 } from 'lucide-react';
 
-const DEFAULT_PYTHON_BOILERPLATE = `class BankAccount:
+const DEFAULT_BOILERPLATES = {
+  python: `class BankAccount:
     def __init__(self, account_holder: str, initial_balance: float = 0.0):
         # Validate initial_balance invariant (cannot be negative)
         if initial_balance < 0:
@@ -63,7 +64,55 @@ if __name__ == "__main__":
                     print(acc.get_balance())
     except (EOFError, StopIteration):
         pass
-`;
+`,
+  cpp: `#include <iostream>
+#include <vector>
+#include <string>
+using namespace std;
+
+int main() {
+    ios_base::sync_with_stdio(false);
+    cin.tie(NULL);
+    // Write your solution here
+    return 0;
+}
+`,
+  c: `#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
+
+int main() {
+    // Write your solution here
+    return 0;
+}
+`,
+  java: `import java.util.*;
+import java.io.*;
+
+public class Solution {
+    public static void main(String[] args) {
+        Scanner scanner = new Scanner(System.in);
+        // Write your solution here
+    }
+}
+`,
+  javascript: `const readline = require('readline');
+
+const rl = readline.createInterface({
+    input: process.stdin,
+    output: process.stdout
+});
+
+const lines = [];
+rl.on('line', (line) => {
+    lines.push(line.trim());
+});
+
+rl.on('close', () => {
+    // Write your solution here
+});
+`
+};
 
 export default function CodingAssessmentPage() {
   const location = useLocation();
@@ -72,7 +121,7 @@ export default function CodingAssessmentPage() {
 
   const [problem, setProblem] = useState(null);
   const [language, setLanguage] = useState('python');
-  const [code, setCode] = useState(DEFAULT_PYTHON_BOILERPLATE);
+  const [code, setCode] = useState(DEFAULT_BOILERPLATES.python);
   const [sessionId, setSessionId] = useState(null);
   const [running, setRunning] = useState(false);
   const [submitting, setSubmitting] = useState(false);
@@ -82,6 +131,15 @@ export default function CodingAssessmentPage() {
   const editorRef = useRef(null);
   const isPastingRef = useRef(false);
   const hasRunOnceRef = useRef(false);
+
+  const handleLanguageChange = (newLang) => {
+    // If current code matches default of previous language or is empty, switch template
+    const prevDefault = DEFAULT_BOILERPLATES[language];
+    if (!code.trim() || code.trim() === prevDefault?.trim()) {
+      setCode(DEFAULT_BOILERPLATES[newLang] || '');
+    }
+    setLanguage(newLang);
+  };
 
   // Hook for session recording
   const { recordEvent, flushEvents } = useSessionRecorder(sessionId);
@@ -347,7 +405,7 @@ export default function CodingAssessmentPage() {
             <span style={{ fontSize: '13px', fontWeight: 700, color: '#94a3b8' }}>Language:</span>
             <select
               value={language}
-              onChange={(e) => setLanguage(e.target.value)}
+              onChange={(e) => handleLanguageChange(e.target.value)}
               style={{
                 backgroundColor: '#334155',
                 color: '#ffffff',
@@ -360,6 +418,9 @@ export default function CodingAssessmentPage() {
             >
               <option value="python">Python 3.12</option>
               <option value="cpp">C++ 20 (GCC)</option>
+              <option value="c">C (GCC)</option>
+              <option value="java">Java 21</option>
+              <option value="javascript">JavaScript (Node.js)</option>
             </select>
           </div>
 
@@ -410,7 +471,17 @@ export default function CodingAssessmentPage() {
         <div style={{ flex: 1, minHeight: '340px' }}>
           <Editor
             height="100%"
-            language={language === 'cpp' ? 'cpp' : 'python'}
+            language={
+              language === 'cpp'
+                ? 'cpp'
+                : language === 'c'
+                ? 'c'
+                : language === 'java'
+                ? 'java'
+                : language === 'javascript'
+                ? 'javascript'
+                : 'python'
+            }
             theme="vs-dark"
             value={code}
             onMount={handleEditorMount}

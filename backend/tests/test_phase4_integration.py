@@ -42,7 +42,7 @@ def test_student_dashboard_endpoints(client, student_token):
     assert resp_mastery.status_code == 200
     m_data = resp_mastery.json()
     assert "overall_mastery" in m_data
-    assert len(m_data["concepts"]) == 7
+    assert len(m_data["concepts"]) >= 7
 
     # 2. Dynamic Learning Path
     resp_path = client.get("/api/learning/path", headers=headers)
@@ -134,7 +134,7 @@ def test_curriculum_management_and_cycle_prevention(client, trainer_token):
     resp_curric = client.get("/api/trainer/curriculum", headers=headers)
     assert resp_curric.status_code == 200
     curric = resp_curric.json()
-    assert len(curric["concepts"]) == 7
+    assert len(curric["concepts"]) >= 7
 
     # 2. Circular dependency test
     # Classes is prerequisite to Objects (Classes -> Objects).

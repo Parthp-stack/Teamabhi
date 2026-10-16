@@ -37,13 +37,30 @@ class AttemptResultResponse(BaseModel):
 @router.get("/learning/next")
 def get_next_question(
     course_id: Optional[int] = None,
+    module_id: Optional[int] = None,
+    concept_id: Optional[int] = None,
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db)
 ):
     """
-    Selects the next question based on the student's weakest eligible prerequisite.
+    Selects the next question based on the student's weakest eligible prerequisite,
+    or targeted topic/concept if specified.
     """
-    return AdaptiveEngine.get_next_question(db, current_user.id, course_id)
+    res = AdaptiveEngine.get_next_question(
+        db=db,
+        student_id=current_user.id,
+        course_id=course_id,
+        module_id=module_id,
+        concept_id=concept_id
+    )
+    if isinstance(res, dict) and "question" in res and isinstance(res["question"], dict):
+        res["id"] = res["question"].get("id")
+        res["question_text"] = res["question"].get("question_text")
+        res["concept_name"] = res.get("concept")
+        res["options"] = res["question"].get("options")
+        res["difficulty"] = res["question"].get("difficulty")
+        res["code_snippet"] = res["question"].get("code_snippet")
+    return res
 
 # 2. POST /api/questions/{question_id}/attempt
 @router.post("/questions/{question_id}/attempt", response_model=AttemptResultResponse)
@@ -55,8 +72,8 @@ def submit_question_attempt(
     db: Session = Depends(get_db)
 ):
     """
-    Evaluates student answer, creates an Attempt record, updates StudentMastery,
-    and returns immediate feedback along with the next recommended concept.
+    Evaluates student answer, creates an Attempt record with time_taken, updates StudentMastery
+    with time-calibrated Bayesian logic, and returns immediate feedback with next recommendations.
     """
     question = db.query(Question).filter(Question.id == question_id).first()
     if not question:
@@ -74,7 +91,7 @@ def submit_question_attempt(
         if student_ans_clean in accepted:
             is_correct = True
 
-    # Record Attempt
+    # Record Attempt with time taken
     attempt = Attempt(
         student_id=current_user.id,
         question_id=question.id,
@@ -86,20 +103,25 @@ def submit_question_attempt(
     db.add(attempt)
     db.commit()
 
-    # Update StudentMastery using explainable Bayesian logic
+    # Update StudentMastery using explainable Bayesian logic with time-based calibration
     mastery_result = MasteryService.update_mastery(
         db=db,
         student_id=current_user.id,
         concept_id=question.concept_id,
         is_correct=is_correct,
         difficulty=question.difficulty,
-        reason_detail=f"Q#{question.id} '{question.question_text[:40]}...'"
+        reason_detail=f"Q#{question.id} '{question.question_text[:40]}...'",
+        time_taken=submission.time_taken
     )
 
     concept = db.query(Concept).filter(Concept.id == question.concept_id).first()
 
     # Recalculate next recommended concept
-    next_activity = AdaptiveEngine.get_next_question(db, current_user.id)
+    next_activity = AdaptiveEngine.get_next_question(
+        db=db,
+        student_id=current_user.id,
+        course_id=concept.module.course_id if concept and concept.module else None
+    )
     next_rec = next_activity.get("concept", concept.name if concept else "Next Concept")
 
     return AttemptResultResponse(
@@ -384,3 +406,191 @@ def get_student_analytics(
         "attempts_per_concept": concept_breakdown,
         "recommendations": recommendations
     }
+
+# 9. GET /api/student/adaptive-score
+@router.get("/student/adaptive-score")
+def get_student_adaptive_score(
+    course_id: Optional[int] = None,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    """
+    Calculates personalized adaptive score from actual database data:
+    - Overall Adaptive Learning Score (%)
+    - Topic-level mastery (e.g. Searching: 85%, Sorting: 62%, Stack: 91%)
+    - List of weak concepts (< 50%)
+    - List of strong concepts (>= 75%)
+    """
+    query = db.query(Concept).order_by(Concept.order_index.asc())
+    if course_id:
+        query = query.join(Concept.module).filter(Concept.module.has(course_id=course_id))
+    concepts = query.all()
+
+    masteries = {m.concept_id: m for m in db.query(StudentMastery).filter(StudentMastery.student_id == current_user.id).all()}
+
+    topic_totals: Dict[str, Dict[str, Any]] = {}
+    weak_concepts = []
+    strong_concepts = []
+    concept_details = []
+
+    total_score = 0.0
+    for c in concepts:
+        m = masteries.get(c.id)
+        score = float(m.mastery_score) if m else 0.0
+        att = m.attempts if m else 0
+        total_score += score
+
+        topic_name = c.module.title if c.module else "General"
+        if topic_name not in topic_totals:
+            topic_totals[topic_name] = {"total_score": 0.0, "count": 0}
+        topic_totals[topic_name]["total_score"] += score
+        topic_totals[topic_name]["count"] += 1
+
+        prereq_eval = AdaptiveEngine.evaluate_prerequisites(c, {cid: float(rec.mastery_score) for cid, rec in masteries.items()})
+        status = MasteryService.get_concept_status(score, prereq_eval["eligible"], attempts=att)
+
+        if score >= 75.0:
+            strong_concepts.append({"id": c.id, "name": c.name, "mastery": score, "topic": topic_name})
+        elif score < 50.0 and (att > 0 or not prereq_eval["eligible"]):
+            weak_concepts.append({"id": c.id, "name": c.name, "mastery": score, "topic": topic_name, "reason": "Low mastery or prerequisite lock"})
+
+        concept_details.append({
+            "id": c.id,
+            "name": c.name,
+            "topic": topic_name,
+            "mastery": score,
+            "status": status,
+            "attempts": att
+        })
+
+    overall_score = round(total_score / len(concepts), 1) if concepts else 0.0
+
+    topic_mastery_list = [
+        {"topic_id": idx, "topic_name": name, "mastery": round(data["total_score"] / data["count"], 1)}
+        for idx, (name, data) in enumerate(topic_totals.items(), 1) if data["count"] > 0
+    ]
+    topic_mastery_dict = {
+        name: round(data["total_score"] / data["count"], 1)
+        for name, data in topic_totals.items() if data["count"] > 0
+    }
+
+    return {
+        "student_id": current_user.id,
+        "student_name": current_user.name,
+        "adaptive_learning_score": overall_score,
+        "topic_mastery": topic_mastery_list,
+        "topic_mastery_dict": topic_mastery_dict,
+        "concept_mastery": concept_details,
+        "weak_concepts": weak_concepts,
+        "strong_concepts": strong_concepts,
+        "total_concepts": len(concepts),
+        "mastered_concepts": len(strong_concepts),
+        "in_progress_concepts": len([c for c in concept_details if c["status"] in ["DEVELOPING", "LEARNING"]]),
+        "weak_concept_count": len(weak_concepts)
+    }
+
+# 10. GET /api/student/concept-breakdown
+@router.get("/student/concept-breakdown")
+def get_concept_breakdown(
+    course_id: Optional[int] = None,
+    module_id: Optional[int] = None,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    """
+    Returns full syllabus breakdown for Subject -> Topic -> Concept -> Sub-concept.
+    Shows status: Not Started, Learning, Weak, Developing, Mastered.
+    Clicking a concept reveals explanation, examples, code, current mastery, and past attempts.
+    """
+    from backend.models.course import Course, Module
+
+    c_query = db.query(Course)
+    if course_id:
+        c_query = c_query.filter(Course.id == course_id)
+    courses = c_query.all()
+
+    masteries = {m.concept_id: m for m in db.query(StudentMastery).filter(StudentMastery.student_id == current_user.id).all()}
+    all_mastery_map = {cid: float(rec.mastery_score) for cid, rec in masteries.items()}
+
+    breakdown = []
+    for crs in courses:
+        modules_data = []
+        mod_query = db.query(Module).filter(Module.course_id == crs.id)
+        if module_id:
+            mod_query = mod_query.filter(Module.id == module_id)
+        modules = mod_query.order_by(Module.order_index.asc()).all()
+
+        for mod in modules:
+            concepts_data = []
+            for c in mod.concepts:
+                m = masteries.get(c.id)
+                score = float(m.mastery_score) if m else 0.0
+                att_count = m.attempts if m else 0
+                corr_count = m.correct_attempts if m else 0
+
+                prereq_eval = AdaptiveEngine.evaluate_prerequisites(c, all_mastery_map)
+                status = MasteryService.get_concept_status(score, prereq_eval["eligible"], attempts=att_count)
+
+                # Recent attempts on this concept
+                past_attempts = db.query(Attempt).join(Question).filter(
+                    Attempt.student_id == current_user.id,
+                    Question.concept_id == c.id
+                ).order_by(Attempt.created_at.desc()).limit(5).all()
+
+                att_history = [
+                    {
+                        "id": a.id,
+                        "question_text": a.question.question_text[:60] if a.question else "",
+                        "is_correct": a.is_correct,
+                        "time_taken": a.time_taken,
+                        "created_at": a.created_at.isoformat()
+                    }
+                    for a in past_attempts
+                ]
+
+                # Questions available for practice
+                q_count = db.query(Question).filter(Question.concept_id == c.id).count()
+
+                concepts_data.append({
+                    "id": c.id,
+                    "name": c.name,
+                    "description": c.description,
+                    "explanation": c.explanation or f"Core algorithmic concept of {c.name}.",
+                    "examples": c.examples or [],
+                    "code_snippet": c.code_snippet or f"# Implementation pattern for {c.name}",
+                    "difficulty": c.difficulty,
+                    "difficulty_level": c.difficulty,
+                    "order_index": c.order_index,
+                    "parent_concept_id": c.parent_concept_id,
+                    "mastery_score": score,
+                    "current_mastery": score,
+                    "status": status,
+                    "attempts_count": att_count,
+                    "correct_count": corr_count,
+                    "accuracy": round((corr_count / att_count * 100), 1) if att_count > 0 else 0.0,
+                    "eligible": prereq_eval["eligible"],
+                    "blocking_prereqs": prereq_eval["blocking_prereqs"],
+                    "available_questions": q_count,
+                    "recent_attempts": att_history
+                })
+
+            modules_data.append({
+                "id": mod.id,
+                "title": mod.title,
+                "name": mod.title,
+                "description": mod.description,
+                "order_index": mod.order_index,
+                "concepts": concepts_data
+            })
+
+        breakdown.append({
+            "id": crs.id,
+            "title": crs.title,
+            "name": crs.title,
+            "description": crs.description,
+            "topics": modules_data,
+            "modules": modules_data
+        })
+
+    return {"courses": breakdown}
+

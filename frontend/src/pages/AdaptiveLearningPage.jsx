@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import { learningService, aiService } from '../services/learningService';
 import {
   Sparkles,
@@ -12,19 +13,36 @@ import {
   X,
   Code,
   AlertCircle,
+  Clock,
+  Code2,
 } from 'lucide-react';
 
 export default function AdaptiveLearningPage() {
+  const [searchParams] = useSearchParams();
+  const targetConceptId = searchParams.get('concept_id');
+  const targetModuleId = searchParams.get('module_id');
+  const targetCourseId = searchParams.get('course_id');
+
   const [activity, setActivity] = useState(null);
   const [selectedAnswer, setSelectedAnswer] = useState('');
   const [loading, setLoading] = useState(true);
   const [submitting, setSubmitting] = useState(false);
   const [result, setResult] = useState(null);
+  const [startTime, setStartTime] = useState(Date.now());
+  const [secondsElapsed, setSecondsElapsed] = useState(0);
 
   // AI Explain Concept Modal state
   const [aiModalOpen, setAiModalOpen] = useState(false);
   const [aiExplanation, setAiExplanation] = useState(null);
   const [loadingAi, setLoadingAi] = useState(false);
+
+  // Live timer
+  useEffect(() => {
+    const timer = setInterval(() => {
+      setSecondsElapsed(Math.floor((Date.now() - startTime) / 1000));
+    }, 1000);
+    return () => clearInterval(timer);
+  }, [startTime]);
 
   const fetchNextQuestion = async () => {
     setLoading(true);
@@ -33,8 +51,14 @@ export default function AdaptiveLearningPage() {
     setAiExplanation(null);
 
     try {
-      const data = await learningService.getNextQuestion();
+      const data = await learningService.getNextQuestion(
+        targetCourseId,
+        targetModuleId,
+        targetConceptId
+      );
       setActivity(data);
+      setStartTime(Date.now());
+      setSecondsElapsed(0);
     } catch (err) {
       console.error('Failed to load next question:', err);
     } finally {
@@ -44,15 +68,16 @@ export default function AdaptiveLearningPage() {
 
   useEffect(() => {
     fetchNextQuestion();
-  }, []);
+  }, [targetConceptId, targetModuleId, targetCourseId]);
 
   const handleSubmit = async (e) => {
     if (e) e.preventDefault();
     if (!activity?.question || !selectedAnswer.trim()) return;
 
+    const timeSpent = Math.max(1, Math.round((Date.now() - startTime) / 100) / 10);
     setSubmitting(true);
     try {
-      const res = await learningService.submitAttempt(activity.question.id, selectedAnswer);
+      const res = await learningService.submitAttempt(activity.question.id, selectedAnswer, timeSpent);
       setResult(res);
     } catch (err) {
       console.error('Submission failed:', err);
@@ -184,6 +209,21 @@ export default function AdaptiveLearningPage() {
               }}
             >
               {question.difficulty}
+            </span>
+            <span
+              style={{
+                display: 'inline-flex',
+                alignItems: 'center',
+                gap: '4px',
+                fontSize: '11px',
+                fontWeight: 700,
+                color: secondsElapsed >= 60 ? '#d97706' : '#475569',
+                backgroundColor: '#f1f5f9',
+                padding: '4px 8px',
+                borderRadius: '6px',
+              }}
+            >
+              <Clock size={12} /> {secondsElapsed}s elapsed
             </span>
           </div>
 
