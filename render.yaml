@@ -1,5 +1,5 @@
 services:
-  # FastAPI Backend on Render
+  # 1. FastAPI Backend Service on Render
   - type: web
     name: adaptive-learning-backend
     runtime: python
@@ -8,14 +8,33 @@ services:
     startCommand: uvicorn backend.main:app --host 0.0.0.0 --port $PORT
     envVars:
       - key: DATABASE_URL
-        sync: false # Set to your Supabase Transaction Pooler URI in Render Dashboard
+        sync: false # Set in Render Dashboard: postgresql://postgres:%40Manudevi162007@db.wixfgiwokmdzxikuuldn.supabase.co:5432/postgres?sslmode=require
       - key: JWT_SECRET
         generateValue: true
       - key: FRONTEND_URL
-        value: http://localhost:5173
+        value: https://adaptive-learning-frontend.onrender.com
       - key: OPENROUTER_API_KEY
         sync: false
       - key: OPENROUTER_MODEL
         value: nvidia/nemotron-3-ultra-550b-a55b:free
       - key: SANDBOX_MODE
         value: isolated_proc
+      - key: SUPABASE_URL
+        sync: false
+      - key: SUPABASE_ANON_KEY
+        sync: false
+
+  # 2. React Vite Frontend Static Site on Render
+  - type: static
+    name: adaptive-learning-frontend
+    plan: free
+    rootDir: frontend
+    buildCommand: npm install && npm run build
+    staticPublishPath: dist
+    routes:
+      - type: rewrite
+        source: /*
+        destination: /index.html
+    envVars:
+      - key: VITE_API_URL
+        value: https://adaptive-learning-backend.onrender.com/api
