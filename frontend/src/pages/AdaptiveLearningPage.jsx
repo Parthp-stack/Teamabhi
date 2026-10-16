@@ -1,39 +1,42 @@
 import React, { useState, useEffect } from 'react';
-import { learningService } from '../services/learningService';
+import { learningService, aiService } from '../services/learningService';
 import {
   Sparkles,
-  HelpCircle,
+  BookOpen,
   CheckCircle2,
   XCircle,
   ArrowRight,
   TrendingUp,
   TrendingDown,
-  BookOpen,
-  Info,
+  HelpCircle,
+  X,
+  Code,
+  AlertCircle,
 } from 'lucide-react';
 
 export default function AdaptiveLearningPage() {
   const [activity, setActivity] = useState(null);
-  const [selectedOption, setSelectedOption] = useState('');
-  const [shortAnswerText, setShortAnswerText] = useState('');
+  const [selectedAnswer, setSelectedAnswer] = useState('');
   const [loading, setLoading] = useState(true);
   const [submitting, setSubmitting] = useState(false);
   const [result, setResult] = useState(null);
-  const [hint, setHint] = useState('');
-  const [loadingHint, setLoadingHint] = useState(false);
+
+  // AI Explain Concept Modal state
+  const [aiModalOpen, setAiModalOpen] = useState(false);
+  const [aiExplanation, setAiExplanation] = useState(null);
+  const [loadingAi, setLoadingAi] = useState(false);
 
   const fetchNextQuestion = async () => {
     setLoading(true);
     setResult(null);
-    setSelectedOption('');
-    setShortAnswerText('');
-    setHint('');
+    setSelectedAnswer('');
+    setAiExplanation(null);
 
     try {
-      const data = await learningService.getNextActivity();
+      const data = await learningService.getNextQuestion();
       setActivity(data);
     } catch (err) {
-      console.error('Failed to load next activity:', err);
+      console.error('Failed to load next question:', err);
     } finally {
       setLoading(false);
     }
@@ -45,14 +48,11 @@ export default function AdaptiveLearningPage() {
 
   const handleSubmit = async (e) => {
     if (e) e.preventDefault();
-    if (!activity?.question) return;
-
-    const answerToSend = activity.question.type === 'SHORT_ANSWER' ? shortAnswerText : selectedOption;
-    if (!answerToSend.trim()) return;
+    if (!activity?.question || !selectedAnswer.trim()) return;
 
     setSubmitting(true);
     try {
-      const res = await learningService.submitAttempt(activity.question.id, answerToSend);
+      const res = await learningService.submitAttempt(activity.question.id, selectedAnswer);
       setResult(res);
     } catch (err) {
       console.error('Submission failed:', err);
@@ -61,17 +61,23 @@ export default function AdaptiveLearningPage() {
     }
   };
 
-  const handleRequestHint = async () => {
-    if (!activity?.question) return;
-    setLoadingHint(true);
+  const handleExplainConceptAI = async () => {
+    if (!activity) return;
+    setAiModalOpen(true);
+    if (aiExplanation) return; // already loaded
+
+    setLoadingAi(true);
     try {
-      const currentAns = activity.question.type === 'SHORT_ANSWER' ? shortAnswerText : selectedOption;
-      const data = await learningService.getHint(activity.question.id, currentAns);
-      setHint(data.hint);
+      const data = await aiService.explainConcept(
+        activity.concept,
+        activity.current_mastery || 0.0,
+        activity.question?.difficulty || 'MEDIUM'
+      );
+      setAiExplanation(data);
     } catch (err) {
-      setHint('Hint: Consider the object lifecycle and state encapsulation principles.');
+      console.error('AI explanation failed:', err);
     } finally {
-      setLoadingHint(false);
+      setLoadingAi(false);
     }
   };
 
@@ -86,24 +92,27 @@ export default function AdaptiveLearningPage() {
 
   if (!activity || !activity.question) {
     return (
-      <div style={{ padding: '40px', backgroundColor: '#ffffff', borderRadius: '12px', textAlign: 'center' }}>
-        <h3 style={{ fontSize: '18px', fontWeight: 700 }}>Course Module Complete!</h3>
-        <p style={{ color: '#64748b' }}>You have completed all active questions for your eligible concepts.</p>
+      <div style={{ padding: '40px', backgroundColor: '#ffffff', borderRadius: '14px', border: '1px solid #e2e8f0', textAlign: 'center' }}>
+        <CheckCircle2 size={40} color="#10b981" style={{ margin: '0 auto 12px auto' }} />
+        <h3 style={{ fontSize: '18px', fontWeight: 800, color: '#0f172a' }}>All Active Concepts Practiced!</h3>
+        <p style={{ color: '#64748b', fontSize: '14px' }}>
+          You have completed all currently eligible prerequisite questions.
+        </p>
         <button
           onClick={fetchNextQuestion}
-          style={{ padding: '10px 20px', backgroundColor: '#4f46e5', color: '#fff', border: 'none', borderRadius: '8px', cursor: 'pointer' }}
+          style={{ padding: '10px 20px', backgroundColor: '#4f46e5', color: '#fff', border: 'none', borderRadius: '8px', cursor: 'pointer', fontWeight: 700 }}
         >
-          Check for New Targets
+          Re-evaluate Learning Path
         </button>
       </div>
     );
   }
 
-  const { target_concept, rationale, question } = activity;
+  const { concept, current_mastery, reason, question } = activity;
 
   return (
-    <div style={{ maxWidth: '840px', margin: '0 auto', display: 'flex', flexDirection: 'column', gap: '20px' }}>
-      {/* Explainable Adaptive Reason Banner */}
+    <div style={{ maxWidth: '820px', margin: '0 auto', display: 'flex', flexDirection: 'column', gap: '20px' }}>
+      {/* Explainable Adaptive Rationale Banner */}
       <div
         style={{
           backgroundColor: '#ffffff',
@@ -111,7 +120,6 @@ export default function AdaptiveLearningPage() {
           border: '1px solid #e0e7ff',
           borderLeft: '5px solid #4f46e5',
           padding: '16px 20px',
-          boxShadow: '0 2px 4px rgba(0,0,0,0.02)',
         }}
       >
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '6px' }}>
@@ -124,18 +132,18 @@ export default function AdaptiveLearningPage() {
           <span
             style={{
               fontSize: '12px',
-              fontWeight: 700,
-              color: '#374151',
+              fontWeight: 800,
+              color: '#334155',
               backgroundColor: '#f1f5f9',
               padding: '2px 8px',
               borderRadius: '6px',
             }}
           >
-            Current Mastery: {target_concept.current_mastery?.toFixed(1)}%
+            Current Mastery: {current_mastery?.toFixed(0)}%
           </span>
         </div>
         <div style={{ fontSize: '13px', color: '#1e293b', lineHeight: '1.5' }}>
-          {rationale}
+          {reason}
         </div>
       </div>
 
@@ -162,12 +170,12 @@ export default function AdaptiveLearningPage() {
                 borderRadius: '6px',
               }}
             >
-              {question.concept_name}
+              {question.concept_name || concept}
             </span>
             <span
               style={{
                 fontSize: '11px',
-                fontWeight: 700,
+                fontWeight: 800,
                 color: question.difficulty === 'EASY' ? '#059669' : question.difficulty === 'MEDIUM' ? '#d97706' : '#dc2626',
                 backgroundColor: question.difficulty === 'EASY' ? '#ecfdf5' : question.difficulty === 'MEDIUM' ? '#fffbeb' : '#fef2f2',
                 padding: '4px 8px',
@@ -178,23 +186,39 @@ export default function AdaptiveLearningPage() {
               {question.difficulty}
             </span>
           </div>
-          <span style={{ fontSize: '12px', color: '#94a3b8' }}>
-            Type: {question.type.replace('_', ' ')}
-          </span>
+
+          {/* AI Explain Concept Button */}
+          <button
+            type="button"
+            onClick={handleExplainConceptAI}
+            style={{
+              display: 'flex',
+              alignItems: 'center',
+              gap: '6px',
+              backgroundColor: '#f5f3ff',
+              border: '1px solid #ddd6fe',
+              color: '#6d28d9',
+              borderRadius: '8px',
+              padding: '6px 12px',
+              fontSize: '12px',
+              fontWeight: 700,
+              cursor: 'pointer',
+            }}
+          >
+            <BookOpen size={14} /> Explain Concept (AI)
+          </button>
         </div>
 
-        {/* Question Title & Description */}
-        <h2 style={{ fontSize: '20px', fontWeight: 800, color: '#0f172a', margin: '0 0 10px 0' }}>
-          {question.title}
+        {/* Question Text */}
+        <h2 style={{ fontSize: '18px', fontWeight: 800, color: '#0f172a', margin: '0 0 20px 0', lineHeight: '1.5' }}>
+          {question.question_text}
         </h2>
-        <p style={{ fontSize: '15px', color: '#334155', lineHeight: '1.6', margin: '0 0 24px 0' }}>
-          {question.description}
-        </p>
 
-        {/* Options / Input Field */}
+        {/* Options / Form */}
         {!result && (
           <form onSubmit={handleSubmit}>
-            {question.type === 'MCQ' && question.options && (
+            {/* MCQ & TRUE_FALSE Options */}
+            {(question.question_type === 'MCQ' || question.question_type === 'TRUE_FALSE') && question.options && (
               <div style={{ display: 'flex', flexDirection: 'column', gap: '10px', marginBottom: '24px' }}>
                 {question.options.map((opt, idx) => (
                   <label
@@ -205,8 +229,8 @@ export default function AdaptiveLearningPage() {
                       gap: '12px',
                       padding: '14px 18px',
                       borderRadius: '10px',
-                      border: selectedOption === opt ? '2px solid #4f46e5' : '1px solid #cbd5e1',
-                      backgroundColor: selectedOption === opt ? '#f5f3ff' : '#ffffff',
+                      border: selectedAnswer === opt ? '2px solid #4f46e5' : '1px solid #cbd5e1',
+                      backgroundColor: selectedAnswer === opt ? '#f5f3ff' : '#ffffff',
                       cursor: 'pointer',
                       fontSize: '14px',
                       fontWeight: 500,
@@ -216,10 +240,10 @@ export default function AdaptiveLearningPage() {
                   >
                     <input
                       type="radio"
-                      name="mcq-option"
+                      name="quiz-answer"
                       value={opt}
-                      checked={selectedOption === opt}
-                      onChange={() => setSelectedOption(opt)}
+                      checked={selectedAnswer === opt}
+                      onChange={() => setSelectedAnswer(opt)}
                       style={{ accentColor: '#4f46e5' }}
                     />
                     <span>{opt}</span>
@@ -228,16 +252,17 @@ export default function AdaptiveLearningPage() {
               </div>
             )}
 
-            {question.type === 'SHORT_ANSWER' && (
+            {/* SHORT_ANSWER Input */}
+            {question.question_type === 'SHORT_ANSWER' && (
               <div style={{ marginBottom: '24px' }}>
                 <label style={{ display: 'block', fontSize: '13px', fontWeight: 600, color: '#475569', marginBottom: '6px' }}>
-                  Your Technical Answer:
+                  Your Answer:
                 </label>
                 <input
                   type="text"
-                  value={shortAnswerText}
-                  onChange={(e) => setShortAnswerText(e.target.value)}
-                  placeholder="Type the exact keyword or concept name..."
+                  value={selectedAnswer}
+                  onChange={(e) => setSelectedAnswer(e.target.value)}
+                  placeholder="Enter the exact technical term or keyword..."
                   style={{
                     width: '100%',
                     padding: '12px 16px',
@@ -250,31 +275,10 @@ export default function AdaptiveLearningPage() {
               </div>
             )}
 
-            {/* Actions Bar */}
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-              <button
-                type="button"
-                onClick={handleRequestHint}
-                disabled={loadingHint}
-                style={{
-                  display: 'flex',
-                  alignItems: 'center',
-                  gap: '6px',
-                  background: 'none',
-                  border: 'none',
-                  color: '#6366f1',
-                  fontSize: '13px',
-                  fontWeight: 600,
-                  cursor: 'pointer',
-                }}
-              >
-                <HelpCircle size={16} />
-                {loadingHint ? 'Requesting AI Hint...' : 'Need an AI Hint?'}
-              </button>
-
+            <div style={{ display: 'flex', justifyContent: 'flex-end' }}>
               <button
                 type="submit"
-                disabled={submitting || (question.type === 'MCQ' ? !selectedOption : !shortAnswerText.trim())}
+                disabled={submitting || !selectedAnswer.trim()}
                 style={{
                   padding: '12px 28px',
                   backgroundColor: '#4f46e5',
@@ -283,36 +287,19 @@ export default function AdaptiveLearningPage() {
                   borderRadius: '10px',
                   fontWeight: 700,
                   fontSize: '14px',
-                  cursor: submitting ? 'not-allowed' : 'pointer',
+                  cursor: submitting || !selectedAnswer.trim() ? 'not-allowed' : 'pointer',
                   boxShadow: '0 4px 6px rgba(79, 70, 229, 0.25)',
                 }}
               >
-                {submitting ? 'Evaluating...' : 'Submit Answer'}
+                {submitting ? 'Checking...' : 'Submit Answer'}
               </button>
             </div>
           </form>
         )}
 
-        {/* AI Hint Display */}
-        {hint && !result && (
-          <div
-            style={{
-              marginTop: '18px',
-              padding: '14px 18px',
-              backgroundColor: '#f8fafc',
-              border: '1px dashed #cbd5e1',
-              borderRadius: '10px',
-              fontSize: '13px',
-              color: '#334155',
-            }}
-          >
-            <strong>Tutor Hint:</strong> {hint}
-          </div>
-        )}
-
-        {/* Result & Bayesian Mastery Update Feedback */}
+        {/* Immediate Result Feedback & Mastery Delta */}
         {result && (
-          <div style={{ marginTop: '20px' }}>
+          <div style={{ marginTop: '10px' }}>
             <div
               style={{
                 padding: '20px',
@@ -324,18 +311,18 @@ export default function AdaptiveLearningPage() {
             >
               <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '8px' }}>
                 {result.is_correct ? (
-                  <CheckCircle2 size={22} color="#16a34a" />
+                  <CheckCircle2 size={24} color="#16a34a" />
                 ) : (
-                  <XCircle size={22} color="#dc2626" />
+                  <XCircle size={24} color="#dc2626" />
                 )}
                 <span
                   style={{
-                    fontSize: '16px',
+                    fontSize: '17px',
                     fontWeight: 800,
                     color: result.is_correct ? '#166534' : '#991b1b',
                   }}
                 >
-                  {result.is_correct ? 'Correct! Knowledge Confirmed.' : 'Incorrect.'}
+                  {result.is_correct ? 'Correct! Mastery Score Increased.' : 'Incorrect.'}
                 </span>
               </div>
 
@@ -352,7 +339,7 @@ export default function AdaptiveLearningPage() {
               )}
             </div>
 
-            {/* Mastery Change Badge */}
+            {/* Mastery Change & Next Concept Recalculation */}
             <div
               style={{
                 display: 'flex',
@@ -362,15 +349,18 @@ export default function AdaptiveLearningPage() {
                 backgroundColor: '#f8fafc',
                 border: '1px solid #e2e8f0',
                 borderRadius: '10px',
-                marginBottom: '24px',
+                marginBottom: '20px',
               }}
             >
               <div>
-                <span style={{ fontSize: '12px', color: '#64748b', fontWeight: 600 }}>
-                  Concept Mastery Updated:
+                <span style={{ fontSize: '11px', color: '#64748b', fontWeight: 700, textTransform: 'uppercase' }}>
+                  Bayesian Knowledge Tracing Update:
                 </span>
                 <div style={{ fontSize: '15px', fontWeight: 800, color: '#0f172a' }}>
                   {result.concept_name}: {result.previous_mastery}% → {result.new_mastery}%
+                </div>
+                <div style={{ fontSize: '12px', color: '#4f46e5', fontWeight: 700, marginTop: '2px' }}>
+                  Next Target Recalculated: {result.next_recommended_concept}
                 </div>
               </div>
 
@@ -380,16 +370,15 @@ export default function AdaptiveLearningPage() {
                   alignItems: 'center',
                   gap: '4px',
                   fontWeight: 800,
-                  fontSize: '16px',
+                  fontSize: '18px',
                   color: result.mastery_change >= 0 ? '#16a34a' : '#dc2626',
                 }}
               >
-                {result.mastery_change >= 0 ? <TrendingUp size={18} /> : <TrendingDown size={18} />}
+                {result.mastery_change >= 0 ? <TrendingUp size={20} /> : <TrendingDown size={20} />}
                 {result.mastery_change >= 0 ? `+${result.mastery_change}%` : `${result.mastery_change}%`}
               </div>
             </div>
 
-            {/* Next Adaptive Step Button */}
             <button
               onClick={fetchNextQuestion}
               style={{
@@ -409,11 +398,114 @@ export default function AdaptiveLearningPage() {
                 boxShadow: '0 4px 10px rgba(79, 70, 229, 0.25)',
               }}
             >
-              Continue to Next Adaptive Question <ArrowRight size={18} />
+              Proceed to Next Adaptive Question <ArrowRight size={18} />
             </button>
           </div>
         )}
       </div>
+
+      {/* AI Explain Concept Modal */}
+      {aiModalOpen && (
+        <div
+          style={{
+            position: 'fixed',
+            top: 0,
+            left: 0,
+            right: 0,
+            bottom: 0,
+            backgroundColor: 'rgba(0,0,0,0.5)',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            zIndex: 1000,
+            padding: '20px',
+          }}
+        >
+          <div
+            style={{
+              backgroundColor: '#ffffff',
+              borderRadius: '16px',
+              maxWidth: '600px',
+              width: '100%',
+              padding: '28px',
+              boxShadow: '0 20px 25px -5px rgba(0,0,0,0.1)',
+              maxHeight: '90vh',
+              overflowY: 'auto',
+            }}
+          >
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                <Sparkles size={18} color="#7c3aed" />
+                <h3 style={{ fontSize: '18px', fontWeight: 800, margin: 0, color: '#0f172a' }}>
+                  AI Conceptual Tutor · {concept}
+                </h3>
+              </div>
+              <button
+                onClick={() => setAiModalOpen(false)}
+                style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#64748b' }}
+              >
+                <X size={20} />
+              </button>
+            </div>
+
+            {loadingAi ? (
+              <div style={{ padding: '30px', textAlign: 'center', color: '#64748b' }}>
+                Synthesizing personalized explanation via OpenRouter Nemotron...
+              </div>
+            ) : aiExplanation ? (
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '16px', fontSize: '14px', lineHeight: '1.6' }}>
+                <div>
+                  <h4 style={{ fontSize: '12px', fontWeight: 700, color: '#64748b', textTransform: 'uppercase', marginBottom: '4px' }}>
+                    Concept Explanation
+                  </h4>
+                  <p style={{ margin: 0, color: '#1e293b' }}>{aiExplanation.explanation}</p>
+                </div>
+
+                {aiExplanation.example && (
+                  <div>
+                    <h4 style={{ fontSize: '12px', fontWeight: 700, color: '#64748b', textTransform: 'uppercase', marginBottom: '4px' }}>
+                      Code Example
+                    </h4>
+                    <pre
+                      style={{
+                        backgroundColor: '#0f172a',
+                        color: '#f8fafc',
+                        padding: '12px',
+                        borderRadius: '8px',
+                        fontSize: '12px',
+                        overflowX: 'auto',
+                        margin: 0,
+                      }}
+                    >
+                      {aiExplanation.example}
+                    </pre>
+                  </div>
+                )}
+
+                {aiExplanation.common_mistake && (
+                  <div style={{ backgroundColor: '#fff7ed', padding: '12px', borderRadius: '8px', border: '1px solid #ffedd5' }}>
+                    <h4 style={{ fontSize: '12px', fontWeight: 700, color: '#c2410c', textTransform: 'uppercase', marginBottom: '4px' }}>
+                      Common Pitfall
+                    </h4>
+                    <p style={{ margin: 0, color: '#9a3412', fontSize: '13px' }}>{aiExplanation.common_mistake}</p>
+                  </div>
+                )}
+
+                {aiExplanation.practice_question && (
+                  <div style={{ backgroundColor: '#f0fdf4', padding: '12px', borderRadius: '8px', border: '1px solid #dcfce7' }}>
+                    <h4 style={{ fontSize: '12px', fontWeight: 700, color: '#166534', textTransform: 'uppercase', marginBottom: '4px' }}>
+                      Quick Check
+                    </h4>
+                    <p style={{ margin: 0, color: '#14532d', fontSize: '13px' }}>{aiExplanation.practice_question}</p>
+                  </div>
+                )}
+              </div>
+            ) : (
+              <div>Failed to generate explanation.</div>
+            )}
+          </div>
+        </div>
+      )}
     </div>
   );
 }

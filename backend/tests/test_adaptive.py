@@ -19,13 +19,13 @@ def test_student_differentiation(db_session):
     act_a = AdaptiveEngine.get_next_learning_activity(db_session, student_a.id)
     act_b = AdaptiveEngine.get_next_learning_activity(db_session, student_b.id)
 
-    # Student A has weak Inheritance / Polymorphism
+    # Student A has completed Classes (90%) and Objects (85%), but weak in Constructors (40%)
     assert act_a["status"] == "READY"
-    assert act_a["target_concept"]["name"] in ["Inheritance", "Polymorphism"]
+    assert act_a["target_concept"]["name"] == "Constructors"
 
-    # Student B has high mastery through Polymorphism, so next target is Dependency Injection
+    # Student B has weak Classes (40%), so Objects is locked; next target is Classes
     assert act_b["status"] == "READY"
-    assert act_b["target_concept"]["name"] == "Dependency Injection"
+    assert act_b["target_concept"]["name"] == "Classes"
 
     # Confirms distinct adaptive learning paths!
     assert act_a["target_concept"]["name"] != act_b["target_concept"]["name"]

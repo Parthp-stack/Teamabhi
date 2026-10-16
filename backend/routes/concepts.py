@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 from typing import Optional, List, Dict, Any
 from backend.database import get_db
@@ -8,6 +8,7 @@ from backend.models.mastery import StudentMastery
 from backend.models.question import Attempt
 from backend.utils.security import get_current_user
 from backend.services.mastery_service import MasteryService
+from backend.services.adaptive_engine import AdaptiveEngine
 
 router = APIRouter(prefix="/concepts", tags=["Concepts"])
 
@@ -17,12 +18,11 @@ def get_concept_graph(
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db)
 ):
-    # If trainer specifies student_id, use it; otherwise use logged in student
     target_student_id = current_user.id
     if student_id and current_user.role == "TRAINER":
         target_student_id = student_id
 
-    concepts: List[Concept] = db.query(Concept).all()
+    concepts: List[Concept] = db.query(Concept).order_by(Concept.order_index.asc()).all()
 
     # Load masteries for target student
     masteries = {
@@ -30,39 +30,33 @@ def get_concept_graph(
             StudentMastery.student_id == target_student_id
         ).all()
     }
+    mastery_map = {cid: float(rec.mastery_score) for cid, rec in masteries.items()}
 
     nodes = []
     edges = []
 
-    # Layout coordinates for OOP pipeline
-    # Classes -> Objects -> Constructors -> Inheritance -> Polymorphism -> Dependency Injection
+    # Horizontal DAG layout coordinates for the 7 concepts:
+    # Programming Basics -> Classes -> Objects -> Constructors -> Inheritance -> Polymorphism -> Dependency Injection
     layout_map = {
-        "Classes": {"x": 80, "y": 180},
-        "Objects": {"x": 300, "y": 180},
-        "Constructors": {"x": 520, "y": 180},
-        "Inheritance": {"x": 740, "y": 180},
-        "Polymorphism": {"x": 960, "y": 180},
-        "Dependency Injection": {"x": 1180, "y": 180}
+        "Programming Basics": {"x": 50, "y": 180},
+        "Classes": {"x": 260, "y": 180},
+        "Objects": {"x": 470, "y": 180},
+        "Constructors": {"x": 680, "y": 180},
+        "Inheritance": {"x": 890, "y": 180},
+        "Polymorphism": {"x": 1100, "y": 180},
+        "Dependency Injection": {"x": 1310, "y": 180}
     }
 
     for idx, c in enumerate(concepts):
         m = masteries.get(c.id)
-        score = m.mastery if m else 0.0
+        score = float(m.mastery_score) if m else 0.0
         attempts = m.attempts if m else 0
         correct_attempts = m.correct_attempts if m else 0
         accuracy = round((correct_attempts / attempts * 100), 1) if attempts > 0 else 0.0
 
-        # Check if prereqs are met
-        prereq_ids = [p.id for p in c.prerequisites]
-        prereqs_met = True
-        for pid in prereq_ids:
-            pm = masteries.get(pid)
-            if not pm or pm.mastery < 65.0:
-                prereqs_met = False
-                break
-
-        status = MasteryService.get_concept_status(score, prereqs_met)
-        pos = layout_map.get(c.name, {"x": 80 + idx * 220, "y": 180})
+        prereq_eval = AdaptiveEngine.evaluate_prerequisites(c, mastery_map)
+        status = MasteryService.get_concept_status(score, prereq_eval["eligible"])
+        pos = layout_map.get(c.name, {"x": 50 + idx * 210, "y": 180})
 
         nodes.append({
             "id": str(c.id),
@@ -77,18 +71,17 @@ def get_concept_graph(
                 "attempts": attempts,
                 "correct_attempts": correct_attempts,
                 "accuracy": accuracy,
-                "prerequisites": prereq_ids,
+                "prerequisites": [p.id for p in c.prerequisites],
                 "dependents": [d.id for d in c.dependents]
             }
         })
 
-        # Add directed edges from prerequisites to this concept
         for p in c.prerequisites:
             edges.append({
                 "id": f"e{p.id}-{c.id}",
                 "source": str(p.id),
                 "target": str(c.id),
-                "animated": status in ["LEARNING", "WEAK"],
+                "animated": status in ["DEVELOPING", "WEAK"],
                 "style": {"stroke": "#6366f1", "strokeWidth": 2}
             })
 
@@ -109,38 +102,28 @@ def get_concept_detail(
     if not concept:
         raise HTTPException(status_code=404, detail="Concept not found")
 
-    mastery = db.query(StudentMastery).filter(
+    m = db.query(StudentMastery).filter(
         StudentMastery.student_id == target_student_id,
         StudentMastery.concept_id == concept_id
     ).first()
 
-    score = mastery.mastery if mastery else 0.0
-    attempts = mastery.attempts if mastery else 0
-    correct = mastery.correct_attempts if mastery else 0
+    score = float(m.mastery_score) if m else 0.0
+    attempts = m.attempts if m else 0
+    correct = m.correct_attempts if m else 0
     accuracy = round((correct / attempts * 100), 1) if attempts > 0 else 0.0
 
-    # Prereqs info
-    prereqs_info = [
-        {"id": p.id, "name": p.name, "description": p.description}
-        for p in concept.prerequisites
-    ]
-    dependents_info = [
-        {"id": d.id, "name": d.name, "description": d.description}
-        for d in concept.dependents
-    ]
-
-    # Recent attempts
     recent_attempts = db.query(Attempt).filter(
         Attempt.student_id == target_student_id,
         Attempt.question.has(concept_id=concept_id)
-    ).order_by(Attempt.timestamp.desc()).limit(10).all()
+    ).order_by(Attempt.created_at.desc()).limit(10).all()
 
     attempts_data = [
         {
             "id": a.id,
-            "question_title": a.question.title,
-            "correct": a.correct,
-            "timestamp": a.timestamp.isoformat()
+            "question_text": a.question.question_text[:60] + "...",
+            "selected_answer": a.selected_answer,
+            "is_correct": a.is_correct,
+            "timestamp": a.created_at.isoformat()
         }
         for a in recent_attempts
     ]
@@ -149,12 +132,13 @@ def get_concept_detail(
         "id": concept.id,
         "name": concept.name,
         "description": concept.description,
+        "difficulty": concept.difficulty,
         "mastery": score,
         "status": MasteryService.get_concept_status(score, True),
         "attempts": attempts,
         "correct_attempts": correct,
         "accuracy": accuracy,
-        "prerequisites": prereqs_info,
-        "dependents": dependents_info,
+        "prerequisites": [{"id": p.id, "name": p.name} for p in concept.prerequisites],
+        "dependents": [{"id": d.id, "name": d.name} for d in concept.dependents],
         "recent_attempts": attempts_data
     }

@@ -1,44 +1,41 @@
 import React, { memo } from 'react';
 import { Handle, Position } from 'reactflow';
-import { Award, BookOpen, AlertTriangle, Lock } from 'lucide-react';
+import { CheckCircle2, TrendingUp, AlertTriangle, Lock } from 'lucide-react';
 
 const statusConfig = {
-  MASTERED: {
+  STRONG: {
     bg: '#ecfdf5',
     border: '#10b981',
     text: '#065f46',
-    badgeBg: '#10b981',
-    icon: Award,
-    label: 'Mastered',
+    icon: CheckCircle2,
+    label: 'Strong',
   },
-  LEARNING: {
+  DEVELOPING: {
     bg: '#eff6ff',
     border: '#3b82f6',
     text: '#1e40af',
-    badgeBg: '#3b82f6',
-    icon: BookOpen,
-    label: 'Learning',
+    icon: TrendingUp,
+    label: 'Developing',
   },
   WEAK: {
     bg: '#fffbeb',
     border: '#f59e0b',
     text: '#92400e',
-    badgeBg: '#f59e0b',
     icon: AlertTriangle,
-    label: 'Needs Practice',
+    label: 'Weak',
   },
   LOCKED: {
     bg: '#f3f4f6',
     border: '#9ca3af',
     text: '#4b5563',
-    badgeBg: '#6b7280',
     icon: Lock,
     label: 'Locked',
   },
 };
 
 function ConceptNode({ data, selected }) {
-  const cfg = statusConfig[data.status] || statusConfig.LEARNING;
+  const normalizedStatus = (data.status || 'WEAK').toUpperCase();
+  const cfg = statusConfig[normalizedStatus] || statusConfig.WEAK;
   const IconComponent = cfg.icon;
 
   return (
@@ -48,8 +45,8 @@ function ConceptNode({ data, selected }) {
         borderRadius: '12px',
         backgroundColor: cfg.bg,
         border: `2px solid ${selected ? '#6366f1' : cfg.border}`,
-        boxShadow: selected ? '0 0 0 4px rgba(99, 102, 241, 0.2)' : '0 4px 6px -1px rgba(0, 0, 0, 0.1)',
-        minWidth: '180px',
+        boxShadow: selected ? '0 0 0 4px rgba(99, 102, 241, 0.25)' : '0 4px 6px -1px rgba(0, 0, 0, 0.08)',
+        minWidth: '190px',
         cursor: 'pointer',
         transition: 'all 0.2s ease',
       }}
@@ -62,7 +59,7 @@ function ConceptNode({ data, selected }) {
           <span
             style={{
               fontSize: '11px',
-              fontWeight: 600,
+              fontWeight: 700,
               textTransform: 'uppercase',
               letterSpacing: '0.05em',
               color: cfg.text,
@@ -74,15 +71,15 @@ function ConceptNode({ data, selected }) {
         <span
           style={{
             fontSize: '14px',
-            fontWeight: 700,
+            fontWeight: 800,
             color: cfg.text,
           }}
         >
-          {data.mastery?.toFixed(0)}%
+          {data.mastery !== undefined ? Number(data.mastery).toFixed(0) : 0}%
         </span>
       </div>
 
-      <div style={{ fontWeight: 700, fontSize: '15px', color: '#111827', marginBottom: '6px' }}>
+      <div style={{ fontWeight: 800, fontSize: '15px', color: '#0f172a', marginBottom: '8px' }}>
         {data.name}
       </div>
 
@@ -91,7 +88,7 @@ function ConceptNode({ data, selected }) {
         style={{
           width: '100%',
           height: '6px',
-          backgroundColor: '#e5e7eb',
+          backgroundColor: '#e2e8f0',
           borderRadius: '3px',
           overflow: 'hidden',
           marginBottom: '6px',
@@ -108,9 +105,9 @@ function ConceptNode({ data, selected }) {
         />
       </div>
 
-      <div style={{ fontSize: '11px', color: '#6b7280', display: 'flex', justifyContent: 'space-between' }}>
+      <div style={{ fontSize: '11px', color: '#64748b', display: 'flex', justifyContent: 'space-between' }}>
         <span>{data.attempts || 0} attempts</span>
-        <span>{data.accuracy || 0}% accuracy</span>
+        <span>{data.accuracy || 0}% acc</span>
       </div>
 
       <Handle type="source" position={Position.Right} style={{ background: cfg.border }} />

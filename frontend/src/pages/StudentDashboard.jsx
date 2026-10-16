@@ -1,33 +1,31 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { masteryService } from '../services/learningService';
-import { codingService } from '../services/codingService';
+import { learningService } from '../services/learningService';
 import {
-  Award,
-  BookOpen,
-  ArrowRight,
-  TrendingUp,
-  AlertCircle,
-  Code2,
-  CheckCircle2,
   Sparkles,
+  ArrowRight,
+  CheckCircle2,
+  AlertTriangle,
+  TrendingUp,
+  GitFork,
+  BookOpen,
 } from 'lucide-react';
 
 export default function StudentDashboard() {
   const navigate = useNavigate();
-  const [overview, setOverview] = useState(null);
-  const [problems, setProblems] = useState([]);
+  const [learningPath, setLearningPath] = useState(null);
+  const [masteryData, setMasteryData] = useState(null);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
     async function loadData() {
       try {
-        const [mOverview, probs] = await Promise.all([
-          masteryService.getMyMastery(),
-          codingService.getProblems(),
+        const [path, mastery] = await Promise.all([
+          learningService.getLearningPath(),
+          learningService.getStudentMastery(),
         ]);
-        setOverview(mOverview);
-        setProblems(probs);
+        setLearningPath(path);
+        setMasteryData(mastery);
       } catch (err) {
         console.error('Failed to load dashboard data:', err);
       } finally {
@@ -39,15 +37,19 @@ export default function StudentDashboard() {
 
   if (loading) {
     return (
-      <div style={{ padding: '40px', textAlign: 'center', color: '#6b7280' }}>
-        Loading adaptive profile...
+      <div style={{ padding: '60px', textAlign: 'center', color: '#64748b' }}>
+        <Sparkles size={32} color="#4f46e5" style={{ animation: 'spin 2s linear infinite', marginBottom: '12px' }} />
+        <div style={{ fontSize: '16px', fontWeight: 600 }}>Loading adaptive learning profile...</div>
       </div>
     );
   }
 
+  const strongCount = masteryData?.concepts?.filter((c) => c.status === 'STRONG').length || 0;
+  const weakCount = masteryData?.concepts?.filter((c) => c.status === 'WEAK').length || 0;
+
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', gap: '28px', maxWidth: '1200px' }}>
-      {/* Top Adaptive Recommendation Banner */}
+    <div style={{ display: 'flex', flexDirection: 'column', gap: '24px', maxWidth: '1100px' }}>
+      {/* Recommended Next Topic Banner */}
       <div
         style={{
           background: 'linear-gradient(135deg, #4f46e5 0%, #7c3aed 100%)',
@@ -63,15 +65,15 @@ export default function StudentDashboard() {
         <div>
           <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '6px' }}>
             <Sparkles size={18} color="#fde047" />
-            <span style={{ fontSize: '12px', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.05em' }}>
-              Adaptive Recommendation
+            <span style={{ fontSize: '11px', fontWeight: 800, textTransform: 'uppercase', letterSpacing: '0.05em' }}>
+              Adaptive Recommendation · Weakest Eligible Prerequisite
             </span>
           </div>
           <h2 style={{ fontSize: '24px', fontWeight: 800, margin: '0 0 8px 0' }}>
-            Practice Target: {overview?.recommended_concept || 'Object-Oriented Programming'}
+            Recommended Next: {learningPath?.current_concept || 'Object Oriented Programming'}
           </h2>
-          <p style={{ margin: 0, fontSize: '14px', color: '#e0e7ff', maxWidth: '600px' }}>
-            Based on your prerequisite competency and knowledge tracing model, our system identified this concept as your highest-priority learning target.
+          <p style={{ margin: 0, fontSize: '14px', color: '#e0e7ff', maxWidth: '640px', lineHeight: '1.5' }}>
+            {learningPath?.reason || 'Based on your prerequisite competency, the adaptive engine identified this topic as your optimal learning target.'}
           </p>
         </div>
         <button
@@ -89,205 +91,142 @@ export default function StudentDashboard() {
             alignItems: 'center',
             gap: '8px',
             boxShadow: '0 4px 6px rgba(0,0,0,0.1)',
+            whiteSpace: 'nowrap',
           }}
         >
-          Start Practice <ArrowRight size={16} />
+          Practice Question <ArrowRight size={16} />
         </button>
       </div>
 
       {/* Metrics Row */}
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: '18px' }}>
-        <div style={{ backgroundColor: '#ffffff', padding: '20px', borderRadius: '12px', border: '1px solid #e5e7eb' }}>
-          <div style={{ fontSize: '12px', color: '#6b7280', fontWeight: 600, textTransform: 'uppercase' }}>
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: '16px' }}>
+        <div style={{ backgroundColor: '#ffffff', padding: '20px', borderRadius: '12px', border: '1px solid #e2e8f0' }}>
+          <div style={{ fontSize: '11px', color: '#64748b', fontWeight: 700, textTransform: 'uppercase' }}>
+            Current Course
+          </div>
+          <div style={{ fontSize: '18px', fontWeight: 800, color: '#0f172a', margin: '6px 0 2px 0' }}>
+            OOP Foundations
+          </div>
+          <div style={{ fontSize: '12px', color: '#64748b' }}>5 Modules · 7 Concepts</div>
+        </div>
+
+        <div style={{ backgroundColor: '#ffffff', padding: '20px', borderRadius: '12px', border: '1px solid #e2e8f0' }}>
+          <div style={{ fontSize: '11px', color: '#64748b', fontWeight: 700, textTransform: 'uppercase' }}>
             Overall Mastery
           </div>
-          <div style={{ fontSize: '28px', fontWeight: 800, color: '#111827', margin: '4px 0' }}>
-            {overview?.overall_mastery}%
+          <div style={{ fontSize: '28px', fontWeight: 800, color: '#4f46e5', margin: '4px 0' }}>
+            {masteryData?.overall_mastery || 0}%
           </div>
-          <div style={{ fontSize: '12px', color: '#10b981', fontWeight: 600 }}>
-            Across 6 core OOP modules
-          </div>
+          <div style={{ fontSize: '12px', color: '#10b981', fontWeight: 600 }}>Bayesian Tracing Average</div>
         </div>
 
-        <div style={{ backgroundColor: '#ffffff', padding: '20px', borderRadius: '12px', border: '1px solid #e5e7eb' }}>
-          <div style={{ fontSize: '12px', color: '#6b7280', fontWeight: 600, textTransform: 'uppercase' }}>
-            Mastered Concepts
+        <div style={{ backgroundColor: '#ffffff', padding: '20px', borderRadius: '12px', border: '1px solid #e2e8f0' }}>
+          <div style={{ fontSize: '11px', color: '#64748b', fontWeight: 700, textTransform: 'uppercase' }}>
+            Strong Concepts
           </div>
           <div style={{ fontSize: '28px', fontWeight: 800, color: '#10b981', margin: '4px 0' }}>
-            {overview?.strong_concepts?.length || 0}
+            {strongCount}
           </div>
-          <div style={{ fontSize: '12px', color: '#6b7280' }}>
-            Competency score ≥ 75%
-          </div>
+          <div style={{ fontSize: '12px', color: '#64748b' }}>Mastery score ≥ 75%</div>
         </div>
 
-        <div style={{ backgroundColor: '#ffffff', padding: '20px', borderRadius: '12px', border: '1px solid #e5e7eb' }}>
-          <div style={{ fontSize: '12px', color: '#6b7280', fontWeight: 600, textTransform: 'uppercase' }}>
-            Concepts Needing Practice
+        <div style={{ backgroundColor: '#ffffff', padding: '20px', borderRadius: '12px', border: '1px solid #e2e8f0' }}>
+          <div style={{ fontSize: '11px', color: '#64748b', fontWeight: 700, textTransform: 'uppercase' }}>
+            Weak Concepts
           </div>
           <div style={{ fontSize: '28px', fontWeight: 800, color: '#f59e0b', margin: '4px 0' }}>
-            {overview?.weak_concepts?.length || 0}
+            {weakCount}
           </div>
-          <div style={{ fontSize: '12px', color: '#6b7280' }}>
-            Prerequisite priority queue
-          </div>
-        </div>
-
-        <div style={{ backgroundColor: '#ffffff', padding: '20px', borderRadius: '12px', border: '1px solid #e5e7eb' }}>
-          <div style={{ fontSize: '12px', color: '#6b7280', fontWeight: 600, textTransform: 'uppercase' }}>
-            Coding Assessments
-          </div>
-          <div style={{ fontSize: '28px', fontWeight: 800, color: '#6366f1', margin: '4px 0' }}>
-            {problems.length}
-          </div>
-          <div style={{ fontSize: '12px', color: '#6b7280' }}>
-            Isolated sandbox challenges
-          </div>
+          <div style={{ fontSize: '12px', color: '#64748b' }}>Mastery score &lt; 50%</div>
         </div>
       </div>
 
-      {/* Concept Breakdown Grid */}
-      <div style={{ backgroundColor: '#ffffff', borderRadius: '14px', border: '1px solid #e5e7eb', padding: '24px' }}>
+      {/* Concept Progress List */}
+      <div style={{ backgroundColor: '#ffffff', borderRadius: '14px', border: '1px solid #e2e8f0', padding: '24px' }}>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px' }}>
           <div>
-            <h3 style={{ fontSize: '18px', fontWeight: 800, color: '#111827', margin: 0 }}>
-              Individual Concept Competencies
+            <h3 style={{ fontSize: '18px', fontWeight: 800, color: '#0f172a', margin: 0 }}>
+              Syllabus Concept Mastery Breakdown
             </h3>
-            <p style={{ margin: '4px 0 0 0', fontSize: '13px', color: '#6b7280' }}>
-              Mastery scores update dynamically via Bayesian learning updates after each attempt.
+            <p style={{ margin: '4px 0 0 0', fontSize: '13px', color: '#64748b' }}>
+              Adaptive prerequisite knowledge graph tracking. Prerequisite threshold: 65%.
             </p>
           </div>
           <button
             onClick={() => navigate('/student/concept-map')}
             style={{
               padding: '8px 16px',
-              backgroundColor: '#f3f4f6',
-              color: '#374151',
+              backgroundColor: '#f1f5f9',
+              color: '#334155',
               border: 'none',
               borderRadius: '8px',
               fontSize: '13px',
-              fontWeight: 600,
+              fontWeight: 700,
               cursor: 'pointer',
+              display: 'flex',
+              alignItems: 'center',
+              gap: '6px',
             }}
           >
-            Open Interactive Concept Graph →
+            <GitFork size={15} /> Visual Concept Map →
           </button>
         </div>
 
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '16px' }}>
-          {overview?.concepts?.map((c) => {
-            const isWeak = c.mastery < 65;
-            const isMastered = c.mastery >= 80;
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(320px, 1fr))', gap: '14px' }}>
+          {masteryData?.concepts?.map((c) => {
+            const isStrong = c.status === 'STRONG';
+            const isWeak = c.status === 'WEAK';
+            const isLocked = c.status === 'LOCKED';
+
             return (
               <div
                 key={c.concept_id}
                 style={{
                   padding: '16px',
                   borderRadius: '10px',
-                  border: `1.5px solid ${isMastered ? '#d1fae5' : isWeak ? '#fed7aa' : '#e5e7eb'}`,
-                  backgroundColor: isMastered ? '#f0fdf4' : isWeak ? '#fffbeb' : '#fafafa',
+                  border: `1.5px solid ${isStrong ? '#d1fae5' : isWeak ? '#fed7aa' : isLocked ? '#e2e8f0' : '#dbeafe'}`,
+                  backgroundColor: isStrong ? '#f0fdf4' : isWeak ? '#fffbeb' : isLocked ? '#f8fafc' : '#eff6ff',
                 }}
               >
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px' }}>
-                  <span style={{ fontWeight: 700, fontSize: '15px', color: '#111827' }}>{c.concept_name}</span>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '6px' }}>
+                  <span style={{ fontWeight: 800, fontSize: '14px', color: '#0f172a' }}>{c.concept_name}</span>
                   <span
                     style={{
+                      fontSize: '11px',
                       fontWeight: 800,
-                      fontSize: '15px',
-                      color: isMastered ? '#15803d' : isWeak ? '#c2410c' : '#1d4ed8',
+                      textTransform: 'uppercase',
+                      padding: '2px 8px',
+                      borderRadius: '4px',
+                      backgroundColor: isStrong ? '#dcfce7' : isWeak ? '#ffedd5' : isLocked ? '#f1f5f9' : '#dbeafe',
+                      color: isStrong ? '#166534' : isWeak ? '#9a3412' : isLocked ? '#64748b' : '#1e40af',
                     }}
                   >
-                    {c.mastery.toFixed(0)}%
+                    {c.status}
                   </span>
                 </div>
-                <div
-                  style={{
-                    height: '6px',
-                    backgroundColor: '#e5e7eb',
-                    borderRadius: '3px',
-                    overflow: 'hidden',
-                    marginBottom: '10px',
-                  }}
-                >
-                  <div
-                    style={{
-                      width: `${c.mastery}%`,
-                      height: '100%',
-                      backgroundColor: isMastered ? '#16a34a' : isWeak ? '#ea580c' : '#2563eb',
-                    }}
-                  />
+
+                <div style={{ fontSize: '12px', color: '#64748b', marginBottom: '10px', minHeight: '36px' }}>
+                  {c.description}
                 </div>
-                <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '11px', color: '#6b7280' }}>
-                  <span>{c.attempts} total attempts</span>
-                  <span style={{ fontWeight: 600, color: isWeak ? '#c2410c' : '#4b5563' }}>
-                    {isWeak ? 'Requires Attention' : 'On Track'}
+
+                {/* Progress Bar */}
+                <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                  <div style={{ flex: 1, height: '6px', backgroundColor: '#e2e8f0', borderRadius: '3px', overflow: 'hidden' }}>
+                    <div
+                      style={{
+                        width: `${c.mastery_score}%`,
+                        height: '100%',
+                        backgroundColor: isStrong ? '#16a34a' : isWeak ? '#ea580c' : isLocked ? '#94a3b8' : '#2563eb',
+                      }}
+                    />
+                  </div>
+                  <span style={{ fontWeight: 800, fontSize: '13px', color: '#0f172a', width: '38px', textAlign: 'right' }}>
+                    {c.mastery_score.toFixed(0)}%
                   </span>
                 </div>
               </div>
             );
           })}
-        </div>
-      </div>
-
-      {/* Coding Assessments List */}
-      <div style={{ backgroundColor: '#ffffff', borderRadius: '14px', border: '1px solid #e5e7eb', padding: '24px' }}>
-        <h3 style={{ fontSize: '18px', fontWeight: 800, color: '#111827', margin: '0 0 16px 0' }}>
-          Available Coding Assessments (Sandbox Protected)
-        </h3>
-        <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
-          {problems.map((prob) => (
-            <div
-              key={prob.id}
-              style={{
-                display: 'flex',
-                justifyContent: 'space-between',
-                alignItems: 'center',
-                padding: '16px 20px',
-                border: '1px solid #e5e7eb',
-                borderRadius: '10px',
-                backgroundColor: '#ffffff',
-              }}
-            >
-              <div>
-                <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-                  <span style={{ fontWeight: 700, fontSize: '15px', color: '#111827' }}>{prob.title}</span>
-                  <span
-                    style={{
-                      fontSize: '11px',
-                      fontWeight: 700,
-                      backgroundColor: prob.difficulty === 'EASY' ? '#ecfdf5' : prob.difficulty === 'MEDIUM' ? '#eff6ff' : '#fef2f2',
-                      color: prob.difficulty === 'EASY' ? '#047857' : prob.difficulty === 'MEDIUM' ? '#1d4ed8' : '#b91c1c',
-                      padding: '2px 8px',
-                      borderRadius: '4px',
-                    }}
-                  >
-                    {prob.difficulty}
-                  </span>
-                </div>
-                <p style={{ margin: '4px 0 0 0', fontSize: '13px', color: '#6b7280' }}>
-                  {prob.description.split('\n')[0]}
-                </p>
-              </div>
-              <button
-                onClick={() => navigate('/student/assessment', { state: { problemId: prob.id } })}
-                style={{
-                  padding: '8px 16px',
-                  backgroundColor: '#4f46e5',
-                  color: '#ffffff',
-                  border: 'none',
-                  borderRadius: '8px',
-                  fontWeight: 600,
-                  fontSize: '13px',
-                  cursor: 'pointer',
-                  display: 'flex',
-                  alignItems: 'center',
-                  gap: '6px',
-                }}
-              >
-                <Code2 size={16} /> Open Editor
-              </button>
-            </div>
-          ))}
         </div>
       </div>
     </div>

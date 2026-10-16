@@ -1,19 +1,18 @@
 from sqlalchemy.orm import Session
+from datetime import datetime, timezone
 from backend.models.user import User, UserRole
 from backend.models.course import Course, Module
-from backend.models.concept import Concept
+from backend.models.concept import Concept, ConceptPrerequisite
 from backend.models.question import Question
 from backend.models.mastery import StudentMastery, MasteryHistory
-from backend.models.coding import CodingProblem, TestCase
 from backend.utils.security import hash_password
 
 def seed_database(db: Session):
-    # Check if already seeded
     existing_user = db.query(User).first()
     if existing_user:
         return
 
-    print("[Seed] Seeding initial database...")
+    print("[Seed Phase 2] Seeding initial database for Adaptive Learning & AI...")
 
     # 1. Demo Users
     trainer = User(
@@ -40,785 +39,528 @@ def seed_database(db: Session):
     db.refresh(student_a)
     db.refresh(student_b)
 
-    # 2. OOP Course and Module
+    # 2. Course: Object Oriented Programming
     course = Course(
-        title="Object-Oriented Programming & System Design",
-        description="Comprehensive foundation in modern OOP paradigms, architecture design patterns, and polymorphic structures."
+        title="Object Oriented Programming",
+        description="Mastery-based curriculum covering foundational programming blocks, encapsulation, inheritance hierarchies, runtime polymorphism, and dependency injection.",
+        created_by=trainer.id
     )
     db.add(course)
     db.commit()
     db.refresh(course)
 
-    module = Module(
-        course_id=course.id,
-        title="OOP Core Foundations",
-        description="Core conceptual blocks from classes to dependency inversion.",
-        order_index=1
-    )
-    db.add(module)
+    # 3. Five Modules as specified in Phase 2
+    m1 = Module(course_id=course.id, title="Programming Basics", description="Variables, control structures, and procedural execution.", order_index=1)
+    m2 = Module(course_id=course.id, title="Classes and Objects", description="State encapsulation, instantiation, and constructors.", order_index=2)
+    m3 = Module(course_id=course.id, title="Inheritance", description="Subtyping, code reuse, and method overriding.", order_index=3)
+    m4 = Module(course_id=course.id, title="Polymorphism", description="Dynamic dispatch, interfaces, and contract abstraction.", order_index=4)
+    m5 = Module(course_id=course.id, title="Dependency Injection", description="Inversion of control and decoupling component creation.", order_index=5)
+
+    db.add_all([m1, m2, m3, m4, m5])
     db.commit()
-    db.refresh(module)
+    db.refresh(m1)
+    db.refresh(m2)
+    db.refresh(m3)
+    db.refresh(m4)
+    db.refresh(m5)
 
-    # 3. Concepts
-    c_classes = Concept(
-        module_id=module.id,
-        name="Classes",
-        description="Blueprints for data structures, encapsulation of state, and method definitions."
-    )
-    c_objects = Concept(
-        module_id=module.id,
-        name="Objects",
-        description="Concrete runtime instances of classes holding unique state in memory."
-    )
-    c_constructors = Concept(
-        module_id=module.id,
-        name="Constructors",
-        description="Special initialization routines for establishing valid object invariants."
-    )
-    c_inheritance = Concept(
-        module_id=module.id,
-        name="Inheritance",
-        description="Subtyping and code reuse mechanism establishing 'is-a' relationships."
-    )
-    c_polymorphism = Concept(
-        module_id=module.id,
-        name="Polymorphism",
-        description="Dynamic dispatch and interface contracts allowing uniform treatment of disparate types."
-    )
-    c_di = Concept(
-        module_id=module.id,
-        name="Dependency Injection",
-        description="Inversion of Control pattern decoupling concrete object creation from business logic."
-    )
+    # 4. Concepts along the requested DAG:
+    # Programming Basics -> Classes -> Objects -> Constructors -> Inheritance -> Polymorphism -> Dependency Injection
+    c_basics = Concept(module_id=m1.id, name="Programming Basics", description="Core computational variables, logic branching, and procedural primitives.", difficulty="EASY", order_index=1)
+    c_classes = Concept(module_id=m2.id, name="Classes", description="Class templates, member attributes, methods, and data encapsulation.", difficulty="EASY", order_index=2)
+    c_objects = Concept(module_id=m2.id, name="Objects", description="Memory allocation, runtime identity, and instance state management.", difficulty="EASY", order_index=3)
+    c_constructors = Concept(module_id=m2.id, name="Constructors", description="Initialization routines, invariant enforcement, and default parameters.", difficulty="MEDIUM", order_index=4)
+    c_inheritance = Concept(module_id=m3.id, name="Inheritance", description="IS-A hierarchies, parent method delegation, and subclass specialization.", difficulty="MEDIUM", order_index=5)
+    c_polymorphism = Concept(module_id=m4.id, name="Polymorphism", description="Dynamic dispatch tables, duck typing, and uniform interface handling.", difficulty="MEDIUM", order_index=6)
+    c_di = Concept(module_id=m5.id, name="Dependency Injection", description="Inversion of Control (IoC), constructor injection, and decoupled design.", difficulty="HARD", order_index=7)
 
-    db.add_all([c_classes, c_objects, c_constructors, c_inheritance, c_polymorphism, c_di])
+    db.add_all([c_basics, c_classes, c_objects, c_constructors, c_inheritance, c_polymorphism, c_di])
     db.commit()
+    for c in [c_basics, c_classes, c_objects, c_constructors, c_inheritance, c_polymorphism, c_di]:
+        db.refresh(c)
 
-    # 4. Prerequisite Graph:
-    # Classes -> Objects -> Constructors -> Inheritance -> Polymorphism -> Dependency Injection
-    c_objects.prerequisites.append(c_classes)
-    c_constructors.prerequisites.append(c_objects)
-    c_inheritance.prerequisites.append(c_constructors)
-    c_polymorphism.prerequisites.append(c_inheritance)
-    c_di.prerequisites.append(c_polymorphism)
+    # 5. Build Prerequisite Backbone:
+    # Programming Basics -> Classes -> Objects -> Constructors -> Inheritance -> Polymorphism -> Dependency Injection
+    prereqs = [
+        (c_classes.id, c_basics.id),
+        (c_objects.id, c_classes.id),
+        (c_constructors.id, c_objects.id),
+        (c_inheritance.id, c_constructors.id),
+        (c_polymorphism.id, c_inheritance.id),
+        (c_di.id, c_polymorphism.id)
+    ]
+    for cid, pid in prereqs:
+        cp = ConceptPrerequisite(concept_id=cid, prerequisite_id=pid)
+        db.add(cp)
     db.commit()
 
-    # 5. Seed Questions (at least 30 questions)
-    questions_data = [
+    # 6. Comprehensive Questions Pool (MCQ, TRUE_FALSE, SHORT_ANSWER across EASY, MEDIUM, HARD)
+    raw_questions = [
+        # --- Programming Basics ---
+        {
+            "concept": c_basics,
+            "type": "MCQ",
+            "text": "What is the primary role of a variable in programming?",
+            "difficulty": "EASY",
+            "options": ["A named storage location in memory holding a value", "A physical cable connecting CPU to RAM", "An operating system process scheduler", "A permanent hardware chip"],
+            "answer": "A named storage location in memory holding a value",
+            "explanation": "Variables reserve space in system memory to store mutable or immutable runtime state."
+        },
+        {
+            "concept": c_basics,
+            "type": "TRUE_FALSE",
+            "text": "In Python, a function must always contain at least one return statement to be valid.",
+            "difficulty": "EASY",
+            "options": ["True", "False"],
+            "answer": "False",
+            "explanation": "Functions without an explicit return statement implicitly return None upon reaching the end."
+        },
+        {
+            "concept": c_basics,
+            "type": "SHORT_ANSWER",
+            "text": "Which boolean logical operator returns True only when both operands are truthy?",
+            "difficulty": "EASY",
+            "options": ["and", "AND", "&&"],
+            "answer": "and",
+            "explanation": "The 'and' operator requires both conditions to evaluate to True."
+        },
+        {
+            "concept": c_basics,
+            "type": "MCQ",
+            "text": "What is the algorithmic time complexity of accessing an element in an array by its index?",
+            "difficulty": "MEDIUM",
+            "options": ["O(1) constant time", "O(n) linear time", "O(log n) logarithmic time", "O(n^2) quadratic time"],
+            "answer": "O(1) constant time",
+            "explanation": "Direct indexing calculates memory offset in O(1) time."
+        },
+        {
+            "concept": c_basics,
+            "type": "MCQ",
+            "text": "What occurs when recursion does not terminate due to a missing base condition?",
+            "difficulty": "HARD",
+            "options": ["Call stack overflow exception", "Database table deadlock", "Hard drive file corruption", "Instant reboot of the host machine"],
+            "answer": "Call stack overflow exception",
+            "explanation": "Each recursive call consumes a stack frame; without a base case, recursion exhausts allocated stack memory."
+        },
+
         # --- Classes ---
         {
             "concept": c_classes,
             "type": "MCQ",
-            "title": "Core Definition of a Class",
-            "description": "Which of the following best defines a 'Class' in Object-Oriented Programming?",
+            "text": "Which statement best describes a Class in Object-Oriented Programming?",
             "difficulty": "EASY",
-            "options": [
-                "A physical memory allocation in the hardware heap",
-                "A blueprint or prototype from which objects are created",
-                "A global execution thread running on the CPU",
-                "A compiled binary executable file"
-            ],
-            "correct_answer": "A blueprint or prototype from which objects are created",
-            "explanation": "A class defines the attributes and methods that its instantiated objects will possess."
+            "options": ["A blueprint or template defining the structure and behavior of objects", "An allocated instance existing in runtime heap memory", "A network socket connection", "A compiled machine code instruction"],
+            "answer": "A blueprint or template defining the structure and behavior of objects",
+            "explanation": "A class serves as the architectural schema from which concrete object instances are manufactured."
         },
         {
             "concept": c_classes,
-            "type": "MCQ",
-            "title": "Encapsulation Purpose",
-            "description": "What is the primary architectural purpose of encapsulation in a class?",
-            "difficulty": "MEDIUM",
-            "options": [
-                "To speed up database index searches",
-                "To bundle data with methods and restrict direct access to internal state",
-                "To allow any external function to overwrite internal variables",
-                "To avoid defining constructor functions"
-            ],
-            "correct_answer": "To bundle data with methods and restrict direct access to internal state",
-            "explanation": "Encapsulation shields the internal representation of an object from unauthorized external tampering."
-        },
-        {
-            "concept": c_classes,
-            "type": "MCQ",
-            "title": "Class Attributes vs Instance Attributes",
-            "description": "In Python, how does a class attribute differ from an instance attribute?",
-            "difficulty": "MEDIUM",
-            "options": [
-                "Class attributes are shared across all instances; instance attributes are unique to each instance",
-                "Class attributes cannot be read after creation",
-                "Instance attributes cannot store string values",
-                "There is no functional difference"
-            ],
-            "correct_answer": "Class attributes are shared across all instances; instance attributes are unique to each instance",
-            "explanation": "Class variables are shared by all instances, whereas instance variables are attached to 'self'."
+            "type": "TRUE_FALSE",
+            "text": "Encapsulation prevents unauthorized direct modification of an object's internal fields from external code.",
+            "difficulty": "EASY",
+            "options": ["True", "False"],
+            "answer": "True",
+            "explanation": "Encapsulation bundles state with methods and provides controlled access modifiers or getters/setters."
         },
         {
             "concept": c_classes,
             "type": "SHORT_ANSWER",
-            "title": "Self Parameter Role",
-            "description": "What explicit keyword or convention in Python method definitions represents the current instance being manipulated?",
+            "text": "What parameter is conventionally passed as the first argument to instance methods in Python classes?",
             "difficulty": "EASY",
-            "options": ["self", "this", "cls", "super"],
-            "correct_answer": "self",
-            "explanation": "In Python, 'self' represents the instance of the class."
+            "options": ["self", "this", "cls"],
+            "answer": "self",
+            "explanation": "'self' references the current instance executing the method."
         },
         {
             "concept": c_classes,
             "type": "MCQ",
-            "title": "Access Modifiers Convention",
-            "description": "In Python, how is a protected or private attribute conventionally indicated?",
-            "difficulty": "EASY",
+            "text": "How do class attributes differ from instance attributes in object models?",
+            "difficulty": "MEDIUM",
             "options": [
-                "With single or double leading underscores (e.g., _var, __var)",
-                "Using the private keyword before the declaration",
-                "By declaring the variable inside an XML schema",
-                "By appending an exclamation mark (!)"
+                "Class attributes are shared across all instances; instance attributes belong exclusively to one object",
+                "Class attributes can only hold numbers; instance attributes can hold text",
+                "Instance attributes cannot be modified after creation",
+                "There is no difference in memory or scope"
             ],
-            "correct_answer": "With single or double leading underscores (e.g., _var, __var)",
-            "explanation": "Python uses _protected (convention) and __private (name mangling) leading underscores."
+            "answer": "Class attributes are shared across all instances; instance attributes belong exclusively to one object",
+            "explanation": "Class variables reside on the class object, while instance variables are bound to individual instance dictionaries."
+        },
+        {
+            "concept": c_classes,
+            "type": "MCQ",
+            "text": "What is the primary benefit of declaring properties with getters and setters instead of public raw variables?",
+            "difficulty": "HARD",
+            "options": [
+                "It enables data validation and lazy calculation without breaking the public interface contract",
+                "It forces the compiler to run twice as fast",
+                "It automatically encrypts the data using AES-256",
+                "It prevents garbage collection from ever running"
+            ],
+            "answer": "It enables data validation and lazy calculation without breaking the public interface contract",
+            "explanation": "Encapsulating access via properties allows enforcing validation invariants without changing caller syntax."
         },
 
         # --- Objects ---
         {
             "concept": c_objects,
             "type": "MCQ",
-            "title": "Instantiation Process",
-            "description": "What occurs in memory when a class is instantiated into an object?",
+            "text": "What is an Object in relation to a Class?",
             "difficulty": "EASY",
             "options": [
-                "Memory is allocated in the heap to store the object's instance state",
-                "The source code is deleted from the disk",
-                "A new operating system process is spawned",
-                "All other objects of the same class are reset"
+                "An instantiated entity with state and identity in memory",
+                "A syntax keyword reserved by the compiler",
+                "An abstract flowchart drawn by a software architect",
+                "A file stored permanently on a magnetic disk"
             ],
-            "correct_answer": "Memory is allocated in the heap to store the object's instance state",
-            "explanation": "Instantiation allocates memory for the new instance and executes initialization logic."
+            "answer": "An instantiated entity with state and identity in memory",
+            "explanation": "An object is a live instance of a class occupying memory."
         },
         {
             "concept": c_objects,
-            "type": "MCQ",
-            "title": "Identity vs Equality",
-            "description": "In Python, which operator evaluates object identity (whether two references point to the same memory address)?",
+            "type": "TRUE_FALSE",
+            "text": "Two distinct objects created from the same class with identical attribute values always share the same memory reference.",
             "difficulty": "MEDIUM",
-            "options": [
-                "is",
-                "==",
-                "equals()",
-                ":="
-            ],
-            "correct_answer": "is",
-            "explanation": "'is' checks memory reference identity (id(a) == id(b)), while '==' checks value equality."
-        },
-        {
-            "concept": c_objects,
-            "type": "MCQ",
-            "title": "Object Lifecycle",
-            "description": "What component in Python or Java manages the deallocation of objects that have no remaining active references?",
-            "difficulty": "MEDIUM",
-            "options": [
-                "Garbage Collector",
-                "Static Linker",
-                "Bytecode Transpiler",
-                "Dynamic Dispatch Table"
-            ],
-            "correct_answer": "Garbage Collector",
-            "explanation": "The garbage collector detects unreferenced memory and reclaims it automatically."
+            "options": ["True", "False"],
+            "answer": "False",
+            "explanation": "Each object instantiation allocates distinct heap memory; equality (==) does not mean identity (is)."
         },
         {
             "concept": c_objects,
             "type": "SHORT_ANSWER",
-            "title": "Checking Instance Type",
-            "description": "Which built-in Python function checks if an object is an instance of a specified class or tuple of classes?",
-            "difficulty": "EASY",
-            "options": ["isinstance", "typeof", "type", "isa"],
-            "correct_answer": "isinstance",
-            "explanation": "isinstance(object, classinfo) returns True if the object is an instance or subclass."
+            "text": "Which Python built-in function returns the unique integer memory identifier of an active object?",
+            "difficulty": "MEDIUM",
+            "options": ["id", "id()", "identity"],
+            "answer": "id",
+            "explanation": "The id() function returns the identity (memory address in CPython) of the object."
         },
         {
             "concept": c_objects,
             "type": "MCQ",
-            "title": "Mutable vs Immutable Objects",
-            "description": "If an object is immutable, what happens when you perform an operation that modifies its value?",
+            "text": "What mechanism automatically reclaims heap memory when an object has zero active references?",
+            "difficulty": "MEDIUM",
+            "options": ["Garbage Collector", "Bytecode Decompiler", "Dynamic Linker", "Process Mutex"],
+            "answer": "Garbage Collector",
+            "explanation": "Garbage collection tracks reference counts and cyclical graphs to free unreferenced memory."
+        },
+        {
+            "concept": c_objects,
+            "type": "MCQ",
+            "text": "What occurs when attempting to modify an attribute of an immutable object such as a tuple or frozen dataclass?",
             "difficulty": "HARD",
             "options": [
-                "A new object is created in memory with the modified value",
-                "The original memory buffer is overwritten in place",
-                "The program throws a compile-time segmentation fault",
-                "All variables pointing to it are deleted"
+                "A TypeError or runtime exception is raised preventing mutation",
+                "The operating system reboots",
+                "The entire variable is silently set to zero",
+                "The CPU cache is invalidated and rebuilt"
             ],
-            "correct_answer": "A new object is created in memory with the modified value",
-            "explanation": "Immutable objects (like strings, tuples) cannot be altered in place; modifications yield new objects."
+            "answer": "A TypeError or runtime exception is raised preventing mutation",
+            "explanation": "Immutable objects disallow in-place field alteration, safeguarding against unintended side-effects."
         },
 
         # --- Constructors ---
         {
             "concept": c_constructors,
             "type": "MCQ",
-            "title": "Constructor Initialization in Python",
-            "description": "Which dunder method serves as the instance initializer in Python classes?",
+            "text": "What is the primary function of a Constructor in OOP?",
             "difficulty": "EASY",
             "options": [
-                "__init__",
-                "__new__",
-                "__create__",
-                "__construct__"
+                "To initialize the newly created object's state and validate initial invariants",
+                "To delete the class from the source code",
+                "To compile the Python script into a binary executable",
+                "To establish an internet TCP connection"
             ],
-            "correct_answer": "__init__",
-            "explanation": "__init__ initializes the newly created object instance with parameters."
-        },
-        {
-            "concept": c_constructors,
-            "type": "MCQ",
-            "title": "Constructors and Object Invariants",
-            "description": "Why is validating parameters inside a constructor considered an architectural best practice?",
-            "difficulty": "MEDIUM",
-            "options": [
-                "To guarantee that the object is never in an invalid state (preserving invariants)",
-                "To speed up network socket transmission",
-                "Because Python disallows methods from raising exceptions",
-                "To automatically generate HTML documentation"
-            ],
-            "correct_answer": "To guarantee that the object is never in an invalid state (preserving invariants)",
-            "explanation": "Validating at construction ensures invalid instances never circulate through the system."
-        },
-        {
-            "concept": c_constructors,
-            "type": "MCQ",
-            "title": "__new__ vs __init__",
-            "description": "What is the key difference between __new__ and __init__ in Python?",
-            "difficulty": "HARD",
-            "options": [
-                "__new__ actually allocates and returns the instance, while __init__ initializes it",
-                "__init__ allocates memory and __new__ deletes it",
-                "__new__ is only available in Python 2",
-                "They are exact synonyms with identical signatures"
-            ],
-            "correct_answer": "__new__ actually allocates and returns the instance, while __init__ initializes it",
-            "explanation": "__new__ is the allocator returning the new object, and __init__ configures its state."
-        },
-        {
-            "concept": c_constructors,
-            "type": "MCQ",
-            "title": "Invoking Parent Constructor",
-            "description": "How should a subclass in Python invoke its parent class constructor?",
-            "difficulty": "MEDIUM",
-            "options": [
-                "super().__init__(*args, **kwargs)",
-                "parent.init(self)",
-                "this.base()",
-                "super.constructor()"
-            ],
-            "correct_answer": "super().__init__(*args, **kwargs)",
-            "explanation": "super() delegates method calls to the parent or MRO next-in-line class."
+            "answer": "To initialize the newly created object's state and validate initial invariants",
+            "explanation": "Constructors set initial attribute values and verify validity."
         },
         {
             "concept": c_constructors,
             "type": "SHORT_ANSWER",
-            "title": "Default Constructor Behavior",
-            "description": "If a class does not define an explicit constructor in Python or C++, what does the language provide?",
+            "text": "What is the standard constructor initializer method name in Python classes?",
             "difficulty": "EASY",
-            "options": ["default constructor", "null constructor", "empty constructor"],
-            "correct_answer": "default constructor",
-            "explanation": "The language synthesizes a default parameterless constructor."
+            "options": ["__init__", "init", "__init__()"],
+            "answer": "__init__",
+            "explanation": "__init__ is called immediately after instance creation."
+        },
+        {
+            "concept": c_constructors,
+            "type": "TRUE_FALSE",
+            "text": "In Python, a constructor can return an explicit custom string or integer value instead of the instance.",
+            "difficulty": "MEDIUM",
+            "options": ["True", "False"],
+            "answer": "False",
+            "explanation": "__init__ must return None; returning any other value causes a TypeError."
+        },
+        {
+            "concept": c_constructors,
+            "type": "MCQ",
+            "text": "How should a subclass constructor invoke its parent class constructor in Python 3?",
+            "difficulty": "MEDIUM",
+            "options": ["super().__init__(*args, **kwargs)", "parent.init(self)", "this.super()", "Base.create()"],
+            "answer": "super().__init__(*args, **kwargs)",
+            "explanation": "super().__init__() calls the parent initializer according to Method Resolution Order (MRO)."
+        },
+        {
+            "concept": c_constructors,
+            "type": "MCQ",
+            "text": "What is the distinction between __new__ and __init__ in Python's object lifecycle?",
+            "difficulty": "HARD",
+            "options": [
+                "__new__ is the allocator returning the new instance; __init__ initializes that instance's attributes",
+                "__init__ allocates memory; __new__ is called only during garbage collection",
+                "__new__ only works for integers and strings",
+                "There is no difference"
+            ],
+            "answer": "__new__ is the allocator returning the new instance; __init__ initializes that instance's attributes",
+            "explanation": "__new__ is a static allocator method returning an instance; __init__ receives that instance as self to populate fields."
         },
 
         # --- Inheritance ---
         {
             "concept": c_inheritance,
             "type": "MCQ",
-            "title": "Principle of Inheritance",
-            "description": "Which relationship type is fundamentally modeled by class inheritance?",
+            "text": "Which fundamental relationship type is modeled by Class Inheritance?",
             "difficulty": "EASY",
-            "options": [
-                "IS-A relationship (e.g., Dog is an Animal)",
-                "HAS-A relationship (e.g., Car has an Engine)",
-                "USES-A relationship (e.g., Printer uses Paper)",
-                "WORKS-WITH relationship"
-            ],
-            "correct_answer": "IS-A relationship (e.g., Dog is an Animal)",
-            "explanation": "Inheritance models the IS-A relationship; composition models HAS-A."
+            "options": ["IS-A relationship (e.g. Dog is an Animal)", "HAS-A relationship (e.g. Car has an Engine)", "USES-A relationship", "RUNS-ON relationship"],
+            "answer": "IS-A relationship (e.g. Dog is an Animal)",
+            "explanation": "Inheritance establishes subtype taxonomy; composition establishes HAS-A."
         },
         {
             "concept": c_inheritance,
-            "type": "MCQ",
-            "title": "Method Resolution Order (MRO)",
-            "description": "In Python multiple inheritance, which algorithm determines the order in which classes are searched for an attribute?",
-            "difficulty": "HARD",
-            "options": [
-                "C3 Linearization algorithm",
-                "Dijkstra's Shortest Path",
-                "Depth-First Search without backtracking",
-                "Randomized Round-Robin"
-            ],
-            "correct_answer": "C3 Linearization algorithm",
-            "explanation": "Python uses the C3 Linearization algorithm to compute a deterministic MRO."
-        },
-        {
-            "concept": c_inheritance,
-            "type": "MCQ",
-            "title": "Liskov Substitution Principle (LSP)",
-            "description": "According to LSP, what should be true when substituting a subclass instance for a base class instance?",
-            "difficulty": "HARD",
-            "options": [
-                "The program must continue to function correctly without altering desired properties",
-                "The subclass must throw an error whenever an unused method is called",
-                "The subclass must override all methods to do nothing",
-                "The program must recompile at runtime"
-            ],
-            "correct_answer": "The program must continue to function correctly without altering desired properties",
-            "explanation": "LSP states objects of a superclass should be replaceable with objects of a subclass without breaking correctness."
-        },
-        {
-            "concept": c_inheritance,
-            "type": "MCQ",
-            "title": "Composition over Inheritance",
-            "description": "Why do senior software architects often advise 'Favor object composition over class inheritance'?",
-            "difficulty": "MEDIUM",
-            "options": [
-                "Composition provides loose coupling and flexibility to change behavior at runtime",
-                "Inheritance requires more RAM than composition",
-                "Composition prevents functions from having return types",
-                "Because compilers forbid multiple inheritance completely"
-            ],
-            "correct_answer": "Composition provides loose coupling and flexibility to change behavior at runtime",
-            "explanation": "Inheritance tightly couples parent and child (white-box reuse), whereas composition keeps objects decoupled (black-box reuse)."
+            "type": "TRUE_FALSE",
+            "text": "Method Overriding allows a subclass to provide a specific implementation of a method already defined in its superclass.",
+            "difficulty": "EASY",
+            "options": ["True", "False"],
+            "answer": "True",
+            "explanation": "Overriding replaces or extends parent class behavior for the specialized subclass."
         },
         {
             "concept": c_inheritance,
             "type": "SHORT_ANSWER",
-            "title": "Diamond Problem Keyword",
-            "description": "In languages like C++, what type of inheritance resolves the ambiguity of the diamond problem?",
+            "text": "What principle in SOLID states that objects of a superclass should be replaceable with objects of a subclass without breaking correctness?",
+            "difficulty": "MEDIUM",
+            "options": ["Liskov Substitution Principle", "LSP", "Liskov", "liskov substitution"],
+            "answer": "Liskov Substitution Principle",
+            "explanation": "LSP ensures subtype behavioral consistency."
+        },
+        {
+            "concept": c_inheritance,
+            "type": "MCQ",
+            "text": "What design guideline suggests using object composition instead of deep class inheritance hierarchies?",
+            "difficulty": "MEDIUM",
+            "options": ["Favor composition over inheritance", "Always inherit at least five levels deep", "Avoid using methods in subclasses", "Make all variables public"],
+            "answer": "Favor composition over inheritance",
+            "explanation": "Composition offers loose coupling and runtime flexibility compared to brittle inheritance hierarchies."
+        },
+        {
+            "concept": c_inheritance,
+            "type": "MCQ",
+            "text": "In Python multiple inheritance, which algorithm determines the deterministic sequence of classes searched for an attribute?",
             "difficulty": "HARD",
-            "options": ["virtual", "virtual inheritance", "abstract"],
-            "correct_answer": "virtual",
-            "explanation": "Virtual inheritance ensures only one copy of the common base class is included."
+            "options": ["C3 Linearization algorithm (MRO)", "Breadth-First Search with pruning", "Dijkstra's shortest path", "Randomized lookup table"],
+            "answer": "C3 Linearization algorithm (MRO)",
+            "explanation": "Python computes Method Resolution Order using the C3 Linearization algorithm."
         },
 
         # --- Polymorphism ---
         {
             "concept": c_polymorphism,
             "type": "MCQ",
-            "title": "Dynamic Dispatch",
-            "description": "What is dynamic dispatch (runtime polymorphism)?",
-            "difficulty": "MEDIUM",
-            "options": [
-                "The selection of which polymorphic method implementation to invoke at runtime based on the actual object type",
-                "Sending HTTP requests to multiple backend server clusters",
-                "Converting integer variables to floating-point numbers automatically",
-                "Generating code documentation during deployment"
-            ],
-            "correct_answer": "The selection of which polymorphic method implementation to invoke at runtime based on the actual object type",
-            "explanation": "Dynamic dispatch resolves the actual method to call during runtime using the vtable."
-        },
-        {
-            "concept": c_polymorphism,
-            "type": "MCQ",
-            "title": "Duck Typing Concept",
-            "description": "What does the phrase 'If it walks like a duck and quacks like a duck, it's a duck' describe in dynamic languages like Python?",
+            "text": "What is Polymorphism in Object-Oriented Design?",
             "difficulty": "EASY",
             "options": [
-                "Duck typing: object suitability is determined by the presence of methods and properties, not explicit inheritance",
-                "A syntax error caused by invalid string formatting",
-                "A strict compilation check requiring abstract class inheritance",
-                "An algorithm for sorting animal arrays"
+                "The ability of different classes to respond to the same method invocation in their own specific way",
+                "Converting integer numbers to binary strings",
+                "Encrypting source code files on disk",
+                "Running multiple programs on different CPU cores simultaneously"
             ],
-            "correct_answer": "Duck typing: object suitability is determined by the presence of methods and properties, not explicit inheritance",
-            "explanation": "Duck typing allows polymorphic code based on behavior rather than declared type hierarchies."
+            "answer": "The ability of different classes to respond to the same method invocation in their own specific way",
+            "explanation": "Polymorphism enables treating disparate concrete types uniformly through a common protocol."
         },
         {
             "concept": c_polymorphism,
-            "type": "MCQ",
-            "title": "Method Overriding vs Overloading",
-            "description": "What distinguishes Method Overriding from Method Overloading?",
-            "difficulty": "MEDIUM",
-            "options": [
-                "Overriding redefines a base class method with the same signature in a subclass; Overloading defines methods with the same name but different parameters in the same class",
-                "Overriding happens only in the compiler; Overloading happens in the CPU cache",
-                "Overriding is only allowed for private variables",
-                "There is no difference"
-            ],
-            "correct_answer": "Overriding redefines a base class method with the same signature in a subclass; Overloading defines methods with the same name but different parameters in the same class",
-            "explanation": "Overriding replaces inherited behavior; overloading allows multiple parameter signatures."
-        },
-        {
-            "concept": c_polymorphism,
-            "type": "MCQ",
-            "title": "Abstract Base Classes (abc)",
-            "description": "In Python, which module is used to define formal interfaces and abstract base classes with mandatory method implementations?",
-            "difficulty": "MEDIUM",
-            "options": [
-                "abc",
-                "interface",
-                "protocols",
-                "virtuals"
-            ],
-            "correct_answer": "abc",
-            "explanation": "The 'abc' module provides ABC and @abstractmethod decorator."
+            "type": "TRUE_FALSE",
+            "text": "Duck Typing means Python checks an object's suitability based on the presence of methods and properties, rather than its explicit inheritance ancestry.",
+            "difficulty": "EASY",
+            "options": ["True", "False"],
+            "answer": "True",
+            "explanation": "'If it walks like a duck and quacks like a duck, it's a duck' defines dynamic polymorphism."
         },
         {
             "concept": c_polymorphism,
             "type": "SHORT_ANSWER",
-            "title": "Vtable Definition",
-            "description": "In compiled languages like C++, what lookup table structure is created by the compiler to support dynamic dispatch?",
+            "text": "What standard Python library module is imported to define Abstract Base Classes and abstract methods?",
+            "difficulty": "MEDIUM",
+            "options": ["abc", "ABC", "abstract"],
+            "answer": "abc",
+            "explanation": "The 'abc' module provides the ABC base and @abstractmethod decorator."
+        },
+        {
+            "concept": c_polymorphism,
+            "type": "MCQ",
+            "text": "What is Dynamic Dispatch (Runtime Polymorphism)?",
+            "difficulty": "MEDIUM",
+            "options": [
+                "Selecting which polymorphic method implementation to execute at runtime based on actual object type",
+                "Sending HTTP requests to multiple remote cloud servers",
+                "Generating random test data at compile time",
+                "Switching between CPU threads"
+            ],
+            "answer": "Selecting which polymorphic method implementation to execute at runtime based on actual object type",
+            "explanation": "Dynamic dispatch resolves method addresses at runtime via virtual method tables or dynamic attribute lookups."
+        },
+        {
+            "concept": c_polymorphism,
+            "type": "MCQ",
+            "text": "In compiled languages like C++, what internal data structure is generated by the compiler to implement dynamic dispatch for virtual functions?",
             "difficulty": "HARD",
-            "options": ["vtable", "virtual method table", "vptr"],
-            "correct_answer": "vtable",
-            "explanation": "A vtable (virtual method table) stores pointers to the virtual functions of a class."
+            "options": ["vtable (virtual method table)", "Abstract Syntax Tree", "B-Tree index", "Circular doubly linked list"],
+            "answer": "vtable (virtual method table)",
+            "explanation": "A vtable contains pointers to virtual functions corresponding to the actual runtime class."
         },
 
         # --- Dependency Injection ---
         {
             "concept": c_di,
             "type": "MCQ",
-            "title": "Core Intent of Dependency Injection",
-            "description": "What is the primary motivation for utilizing Dependency Injection (DI)?",
+            "text": "What is the core architectural objective of Dependency Injection (DI)?",
             "difficulty": "MEDIUM",
             "options": [
-                "To invert control so that a class receives its dependencies from an external assembler rather than creating them internally",
-                "To inject SQL statements directly into the backend database",
-                "To force all classes to use global singleton variables",
-                "To eliminate the need for writing unit tests"
+                "To invert control so objects receive their dependencies from the outside rather than creating them directly internally",
+                "To inject malicious SQL queries into databases",
+                "To force all classes to be global singletons",
+                "To eliminate writing unit tests"
             ],
-            "correct_answer": "To invert control so that a class receives its dependencies from an external assembler rather than creating them internally",
-            "explanation": "DI decouples the usage of an object from its creation, making code testable and modular."
+            "answer": "To invert control so objects receive their dependencies from the outside rather than creating them directly internally",
+            "explanation": "DI decouples creation of dependencies from usage, drastically improving modularity and testability."
         },
         {
             "concept": c_di,
-            "type": "MCQ",
-            "title": "Dependency Inversion Principle (DIP)",
-            "description": "The 'D' in SOLID principles states that high-level modules should not depend on low-level modules. Both should depend on what?",
-            "difficulty": "MEDIUM",
-            "options": [
-                "Abstractions (Interfaces or abstract contracts)",
-                "Concrete database drivers",
-                "Hardware device registers",
-                "Raw JSON strings"
-            ],
-            "correct_answer": "Abstractions (Interfaces or abstract contracts)",
-            "explanation": "DIP mandates depending upon abstractions rather than concrete implementations."
-        },
-        {
-            "concept": c_di,
-            "type": "MCQ",
-            "title": "Constructor Injection vs Service Locator",
-            "description": "Why is Constructor Injection generally preferred over the Service Locator pattern?",
-            "difficulty": "HARD",
-            "options": [
-                "Constructor Injection makes dependencies explicit in the API contract, avoiding hidden dependencies",
-                "Service Locator runs faster because it bypasses memory management",
-                "Constructor Injection is only supported in Python",
-                "Service Locator is banned by the ISO C++ standard"
-            ],
-            "correct_answer": "Constructor Injection makes dependencies explicit in the API contract, avoiding hidden dependencies",
-            "explanation": "Constructor injection makes an object's dependencies visible and enforceable at initialization."
-        },
-        {
-            "concept": c_di,
-            "type": "MCQ",
-            "title": "Unit Testing with DI",
-            "description": "How does Dependency Injection fundamentally simplify unit testing of complex business logic?",
+            "type": "TRUE_FALSE",
+            "text": "Dependency Injection makes unit testing significantly easier because external services (databases, APIs) can be substituted with mock objects.",
             "difficulty": "EASY",
-            "options": [
-                "It allows mocking or stubbing external dependencies (e.g. database, payment gateway) easily",
-                "It eliminates the need for test assertion statements",
-                "It automatically generates test cases without code",
-                "It bypasses all exception checks"
-            ],
-            "correct_answer": "It allows mocking or stubbing external dependencies (e.g. database, payment gateway) easily",
-            "explanation": "Mock implementations can be passed into the subject under test without modifying production code."
+            "options": ["True", "False"],
+            "answer": "True",
+            "explanation": "Mock dependencies can easily be passed into class constructors during testing."
         },
         {
             "concept": c_di,
             "type": "SHORT_ANSWER",
-            "title": "Inversion of Control Acronym",
-            "description": "What common three-letter architectural acronym represents the broader design paradigm of which Dependency Injection is a subtype?",
+            "text": "What broader architectural principle does Dependency Injection implement, often abbreviated as IoC?",
             "difficulty": "EASY",
-            "options": ["IoC", "IOC", "ioc"],
-            "correct_answer": "IoC",
-            "explanation": "Inversion of Control (IoC) is the overarching principle."
+            "options": ["Inversion of Control", "inversion of control", "IoC", "IOC"],
+            "answer": "Inversion of Control",
+            "explanation": "Inversion of Control (IoC) delegates control flow and dependency management to an external coordinator."
+        },
+        {
+            "concept": c_di,
+            "type": "MCQ",
+            "text": "Which form of Dependency Injection is generally regarded as best practice for enforcing non-optional dependencies?",
+            "difficulty": "MEDIUM",
+            "options": ["Constructor Injection", "Setter Injection", "Field / Reflection Injection", "Global Variable Locator"],
+            "answer": "Constructor Injection",
+            "explanation": "Constructor injection makes required dependencies explicit and guarantees the object is never partially initialized."
+        },
+        {
+            "concept": c_di,
+            "type": "MCQ",
+            "text": "The Dependency Inversion Principle (the 'D' in SOLID) mandates that high-level modules and low-level modules should both depend upon what?",
+            "difficulty": "HARD",
+            "options": ["Abstractions (Interfaces or abstract contracts)", "Concrete low-level driver implementations", "Global singleton variables", "Operating system file paths"],
+            "answer": "Abstractions (Interfaces or abstract contracts)",
+            "explanation": "High-level policy should not depend on low-level detail; both should depend on abstract contracts."
         }
     ]
 
-    for q in questions_data:
-        question_obj = Question(
+    for q in raw_questions:
+        q_obj = Question(
             concept_id=q["concept"].id,
-            type=q["type"],
-            title=q["title"],
-            description=q["description"],
+            question_text=q["text"],
+            question_type=q["type"],
             difficulty=q["difficulty"],
             options=q.get("options"),
-            correct_answer=q["correct_answer"],
-            explanation=q.get("explanation")
+            correct_answer=q["answer"],
+            explanation=q.get("explanation"),
+            created_at=datetime.now(timezone.utc)
         )
-        db.add(question_obj)
+        db.add(q_obj)
     db.commit()
 
-    # 6. Seed Student Mastery Profiles
+    # 7. Student-Specific Adaptation Demo Baseline (Section 9):
     # Student A:
-    # High: Classes (95%), Objects (90%), Constructors (80%)
-    # Weak: Inheritance (45%), Polymorphism (30%), Dependency Injection (10%)
-    student_a_masteries = [
-        (c_classes.id, 95.0, 10, 9),
-        (c_objects.id, 90.0, 8, 7),
-        (c_constructors.id, 80.0, 6, 5),
-        (c_inheritance.id, 45.0, 5, 2),
-        (c_polymorphism.id, 30.0, 4, 1),
-        (c_di.id, 10.0, 1, 0),
+    # - Programming Basics: 95
+    # - Classes: 90
+    # - Objects: 85
+    # - Constructors: 40  <-- WEAKEST ELIGIBLE PREREQUISITE!
+    # - Inheritance: 20
+    # - Polymorphism: 10
+    # - DI: 0
+    # Next recommended target for Student A MUST BE Constructors!
+    student_a_scores = [
+        (c_basics.id, 95.0, 10, 9),
+        (c_classes.id, 90.0, 10, 9),
+        (c_objects.id, 85.0, 8, 7),
+        (c_constructors.id, 40.0, 5, 2),
+        (c_inheritance.id, 20.0, 4, 1),
+        (c_polymorphism.id, 10.0, 2, 0),
+        (c_di.id, 0.0, 0, 0)
     ]
-    for cid, score, att, corr in student_a_masteries:
+    for cid, score, att, corr in student_a_scores:
         sm = StudentMastery(
             student_id=student_a.id,
             concept_id=cid,
-            mastery=score,
+            mastery_score=score,
             attempts=att,
-            correct_attempts=corr
+            correct_attempts=corr,
+            last_attempt_at=datetime.now(timezone.utc)
         )
-        hist = MasteryHistory(
+        mh = MasteryHistory(
             student_id=student_a.id,
             concept_id=cid,
-            mastery=score,
+            mastery_score=score,
             change_amount=score,
-            reason="Diagnostic Baseline Assessment"
+            reason="Diagnostic Initial Assessment",
+            timestamp=datetime.now(timezone.utc)
         )
         db.add(sm)
-        db.add(hist)
+        db.add(mh)
 
     # Student B:
-    # High: Classes (95%), Objects (93%), Constructors (91%), Inheritance (90%), Polymorphism (88%)
-    # Next/Weak: Dependency Injection (20%)
-    student_b_masteries = [
-        (c_classes.id, 95.0, 12, 11),
-        (c_objects.id, 93.0, 10, 9),
-        (c_constructors.id, 91.0, 9, 8),
-        (c_inheritance.id, 90.0, 8, 7),
-        (c_polymorphism.id, 88.0, 8, 7),
-        (c_di.id, 20.0, 2, 0),
+    # - Programming Basics: 80
+    # - Classes: 40  <-- WEAKEST ELIGIBLE PREREQUISITE (Prereq for Objects & Constructors)!
+    # - Objects: 30
+    # - Constructors: 20
+    # - Inheritance: 10
+    # - Polymorphism: 5
+    # - DI: 0
+    # Next recommended target for Student B MUST BE Classes!
+    student_b_scores = [
+        (c_basics.id, 80.0, 8, 6),
+        (c_classes.id, 40.0, 6, 2),
+        (c_objects.id, 30.0, 4, 1),
+        (c_constructors.id, 20.0, 3, 0),
+        (c_inheritance.id, 10.0, 2, 0),
+        (c_polymorphism.id, 5.0, 1, 0),
+        (c_di.id, 0.0, 0, 0)
     ]
-    for cid, score, att, corr in student_b_masteries:
+    for cid, score, att, corr in student_b_scores:
         sm = StudentMastery(
             student_id=student_b.id,
             concept_id=cid,
-            mastery=score,
+            mastery_score=score,
             attempts=att,
-            correct_attempts=corr
+            correct_attempts=corr,
+            last_attempt_at=datetime.now(timezone.utc)
         )
-        hist = MasteryHistory(
+        mh = MasteryHistory(
             student_id=student_b.id,
             concept_id=cid,
-            mastery=score,
+            mastery_score=score,
             change_amount=score,
-            reason="Diagnostic Baseline Assessment"
+            reason="Diagnostic Initial Assessment",
+            timestamp=datetime.now(timezone.utc)
         )
         db.add(sm)
-        db.add(hist)
+        db.add(mh)
 
-    # 7. Seed 5 Coding Problems with hidden & visible test cases
-    p1 = CodingProblem(
-        title="Bank Account Transaction Manager",
-        description="""Design a `BankAccount` class that models basic deposit, withdrawal, and balance enquiry operations with invariant validation.
-
-Implement the class with:
-- Constructor: `__init__(self, account_holder: str, initial_balance: float = 0.0)`
-  - Raises `ValueError` if `initial_balance < 0`.
-- Methods:
-  - `deposit(self, amount: float) -> float`: Adds amount to balance. Raises `ValueError` if `amount <= 0`. Returns updated balance.
-  - `withdraw(self, amount: float) -> float`: Deducts amount from balance. Raises `ValueError` if `amount <= 0` or if `amount > balance`. Returns updated balance.
-  - `get_balance(self) -> float`: Returns current balance.
-
-Input format from standard input:
-First line: initial balance
-Subsequent lines: command string e.g. "deposit 50" or "withdraw 20" or "balance"
-Print balance after each command.""",
-        difficulty="EASY",
-        allowed_languages=["python", "cpp"],
-        time_limit=2.0,
-        memory_limit=128
-    )
-
-    p2 = CodingProblem(
-        title="Employee Hierarchy with Polymorphic Payroll",
-        description="""Design a polymorphic payroll system with a base `Employee` class and subclasses `SalariedEmployee` and `HourlyEmployee`.
-
-Base class `Employee`:
-- `__init__(self, name: str, emp_id: int)`
-- `calculate_pay(self) -> float`: Abstract method (raises `NotImplementedError` or abstract in C++).
-
-Subclass `SalariedEmployee(Employee)`:
-- `__init__(self, name: str, emp_id: int, annual_salary: float)`
-- `calculate_pay(self) -> float`: Returns `annual_salary / 12` rounded to 2 decimal places.
-
-Subclass `HourlyEmployee(Employee)`:
-- `__init__(self, name: str, emp_id: int, hourly_rate: float, hours_worked: float)`
-- `calculate_pay(self) -> float`:
-  - Standard hours <= 40 paid at `hourly_rate`.
-  - Overtime (> 40 hours) paid at `1.5 * hourly_rate`.
-  - Returns total pay rounded to 2 decimal places.""",
-        difficulty="MEDIUM",
-        allowed_languages=["python", "cpp"],
-        time_limit=2.0,
-        memory_limit=128
-    )
-
-    p3 = CodingProblem(
-        title="Shape Area & Perimeter Calculator",
-        description="""Demonstrate runtime polymorphism by building an abstract `Shape` class and concrete subclasses `Rectangle` and `Circle`.
-
-Base class `Shape`:
-- Abstract methods: `area() -> float` and `perimeter() -> float`
-
-Subclass `Rectangle(Shape)`:
-- `__init__(self, width: float, height: float)`
-- Computes rectangle area and perimeter.
-
-Subclass `Circle(Shape)`:
-- `__init__(self, radius: float)`
-- Computes circle area (`3.14159 * r^2`) and perimeter (`2 * 3.14159 * r`).
-
-Both area and perimeter must be formatted to 2 decimal places.""",
-        difficulty="EASY",
-        allowed_languages=["python", "cpp"],
-        time_limit=2.0,
-        memory_limit=128
-    )
-
-    p4 = CodingProblem(
-        title="Notification Service with Dependency Injection",
-        description="""Implement an inverted dependency pattern for a `NotificationDispatcher`.
-
-Define an interface/base `MessageSender`:
-- `send(self, recipient: str, message: str) -> str`
-
-Implement concrete senders:
-- `EmailSender`: returns `"EMAIL to {recipient}: {message}"`
-- `SmsSender`: returns `"SMS to {recipient}: {message}"`
-
-Implement `NotificationDispatcher`:
-- `__init__(self, sender: MessageSender)`: Constructor injects sender.
-- `notify(self, recipient: str, message: str) -> str`: Calls the injected sender's `send()` method.""",
-        difficulty="MEDIUM",
-        allowed_languages=["python", "cpp"],
-        time_limit=2.0,
-        memory_limit=128
-    )
-
-    p5 = CodingProblem(
-        title="Robust Stack with Max Value Tracking",
-        description="""Implement a `MinMaxStack` class with constructor initialization and O(1) retrieval of current minimum and maximum elements.
-
-Methods:
-- `push(val: int)`: Pushes val to stack.
-- `pop() -> int`: Pops and returns top element (raises `IndexError` if empty).
-- `get_max() -> int`: Returns maximum value currently in stack in O(1) time.
-- `get_min() -> int`: Returns minimum value currently in stack in O(1) time.""",
-        difficulty="HARD",
-        allowed_languages=["python", "cpp"],
-        time_limit=2.0,
-        memory_limit=128
-    )
-
-    db.add_all([p1, p2, p3, p4, p5])
     db.commit()
-
-    # Seed test cases for Problem 1
-    tc1_vis1 = TestCase(
-        problem_id=p1.id,
-        input="100\ndeposit 50\nbalance",
-        expected_output="150.0\n150.0",
-        is_hidden=False
-    )
-    tc1_vis2 = TestCase(
-        problem_id=p1.id,
-        input="200\nwithdraw 50\nbalance",
-        expected_output="150.0\n150.0",
-        is_hidden=False
-    )
-    tc1_hid1 = TestCase(
-        problem_id=p1.id,
-        input="500\ndeposit 250\nwithdraw 100\nwithdraw 50\nbalance",
-        expected_output="750.0\n650.0\n600.0\n600.0",
-        is_hidden=True
-    )
-    tc1_hid2 = TestCase(
-        problem_id=p1.id,
-        input="1000\nwithdraw 1000\nbalance",
-        expected_output="0.0\n0.0",
-        is_hidden=True
-    )
-
-    # Seed test cases for Problem 2
-    tc2_vis1 = TestCase(
-        problem_id=p2.id,
-        input="SALARIED Alice 101 120000",
-        expected_output="Alice: 10000.0",
-        is_hidden=False
-    )
-    tc2_vis2 = TestCase(
-        problem_id=p2.id,
-        input="HOURLY Bob 102 20 45",
-        expected_output="Bob: 950.0",
-        is_hidden=False
-    )
-    tc2_hid1 = TestCase(
-        problem_id=p2.id,
-        input="HOURLY Charlie 103 25 35",
-        expected_output="Charlie: 875.0",
-        is_hidden=True
-    )
-    tc2_hid2 = TestCase(
-        problem_id=p2.id,
-        input="SALARIED Diana 104 96000",
-        expected_output="Diana: 8000.0",
-        is_hidden=True
-    )
-
-    # Seed test cases for Problem 3
-    tc3_vis1 = TestCase(
-        problem_id=p3.id,
-        input="RECTANGLE 4 5",
-        expected_output="Area: 20.00, Perimeter: 18.00",
-        is_hidden=False
-    )
-    tc3_hid1 = TestCase(
-        problem_id=p3.id,
-        input="CIRCLE 3",
-        expected_output="Area: 28.27, Perimeter: 18.85",
-        is_hidden=True
-    )
-
-    # Seed test cases for Problem 4
-    tc4_vis1 = TestCase(
-        problem_id=p4.id,
-        input="EMAIL user@example.com Welcome",
-        expected_output="EMAIL to user@example.com: Welcome",
-        is_hidden=False
-    )
-    tc4_hid1 = TestCase(
-        problem_id=p4.id,
-        input="SMS +1234567890 VerificationCode:4291",
-        expected_output="SMS to +1234567890: VerificationCode:4291",
-        is_hidden=True
-    )
-
-    # Seed test cases for Problem 5
-    tc5_vis1 = TestCase(
-        problem_id=p5.id,
-        input="push 10\npush 20\npush 5\nmax\nmin",
-        expected_output="20\n5",
-        is_hidden=False
-    )
-    tc5_hid1 = TestCase(
-        problem_id=p5.id,
-        input="push 15\npush 30\npop\nmax\nmin",
-        expected_output="30\n15\n15",
-        is_hidden=True
-    )
-
-    db.add_all([
-        tc1_vis1, tc1_vis2, tc1_hid1, tc1_hid2,
-        tc2_vis1, tc2_vis2, tc2_hid1, tc2_hid2,
-        tc3_vis1, tc3_hid1,
-        tc4_vis1, tc4_hid1,
-        tc5_vis1, tc5_hid1
-    ])
-    db.commit()
-
-    print("[Seed] Successfully seeded OOP Course, 6 concepts, 30 questions, 5 coding problems, and demo profiles for Trainer, Student A, and Student B!")
+    print("[Seed Phase 2] Successfully seeded Course, 5 Modules, 7 Concepts, 35 Questions, and Demo Students A & B.")

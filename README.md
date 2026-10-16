@@ -52,9 +52,9 @@ The database comes pre-seeded with three demo profiles to demonstrate adaptive d
 
 | Role | Name | Email | Password | Baseline State |
 |---|---|---|---|---|
-| **Student A** | Alice Walker | `student.a@adaptive.edu` | `student123` | High in Classes/Objects (95/90%), weak in Inheritance (45%) & Polymorphism (30%). Recommends **Inheritance**. |
-| **Student B** | Bob Martinez | `student.b@adaptive.edu` | `student123` | High in all foundations (88-95%), eligible for **Dependency Injection** (20%). Recommends **Dependency Injection**. |
-| **Trainer** | Dr. Alan Turing | `trainer@adaptive.edu` | `trainer123` | Access to cohort analytics, integrity evidence timeline, and session replays. |
+| **Student A** | Alice Walker | `student.a@adaptive.edu` | `student123` | Completed Classes (90%) & Objects (85%), weak in Constructors (40%). Prerequisites satisfied. Recommends **Constructors**. |
+| **Student B** | Bob Martinez | `student.b@adaptive.edu` | `student123` | Weak in Classes (40%). Objects is locked because Classes < 65% prerequisite threshold. Recommends **Classes**. |
+| **Trainer** | Dr. Alan Turing | `trainer@adaptive.edu` | `trainer123` | Access to cohort concept analytics, average mastery distributions, and weakest prerequisite bottlenecks. |
 
 ---
 
@@ -108,39 +108,30 @@ All 9 test suites pass with zero warnings.
 
 ---
 
-## 7. Step-by-Step Hackathon Demo Flow
-
-1. **Step 1 — Login as Student A**:
-   - Go to `http://localhost:5173/login` and click **"Student A (Alice Walker)"**.
-   - Note the recommendation: **"Practice Target: Inheritance"** (mastery 45%).
-   - Open **Concept Graph**: Notice Classes, Objects, and Constructors are green (`MASTERED`), while Inheritance is orange (`WEAK`).
-
-2. **Step 2 — Adaptive Question Progression**:
-   - Click **Adaptive Practice**: The system presents an Inheritance question with explainable rationale.
-   - Answer the question: Observe the instant Bayesian mastery update (+8% on correct answer).
-
-3. **Step 3 — Login as Student B (Differentiation Proof)**:
-   - Use the demo switcher in the top navbar to switch to **Student B**.
-   - Notice the recommendation: **"Practice Target: Dependency Injection"** (mastery 20%).
-   - **Proof of Adaptivity**: Student A and Student B receive completely different questions based on individual prerequisite competency!
-
-4. **Step 4 — Coding Assessment & Sandbox**:
-   - Navigate to **Coding Assessment**.
-   - Edit the Python code in Monaco Editor.
-   - Click **Run Tests**: Runs against visible test cases inside the sandbox.
-   - Click **Submit & Explain Code**: Runs against hidden tests and triggers the AI viva workflow.
-
-5. **Step 5 — Explain Your Code (Viva)**:
-   - The system presents 2–3 questions specifically generated from the student's actual code.
-   - Enter answers and submit: AI evaluates technical consistency against the implementation.
-
-6. **Step 6 — Trainer Review & Session Replay**:
-   - Switch to **Trainer (Alan Turing)** using the top bar.
-   - Open **Session Replay** for the assessment:
-     - Left column: Chronological event timeline (focus, paste, run, submit).
-     - Center column: Monaco Editor reconstructing code changes with play/pause and scrubber slider.
-     - Right column: Evidence signals (e.g. `LARGE_PASTE`, `NO_CYCLE`).
-     - Click **"Jump to Event #2"** on the Large Paste signal: The replay scrubber immediately seeks to that exact moment!
+## 7. Step-by-Step Hackathon Demo Flow (Phase 2)
+ 
+ 1. **Step 1 — Login as Student A**:
+    - Go to `http://localhost:5173/login` and click **"Student A (Alice Walker)"**.
+    - Note the recommendation: **"Practice Target: Constructors"** (40% baseline mastery).
+    - Open **Concept Graph**: Notice `Programming Basics`, `Classes`, and `Objects` are green (`STRONG`), while `Constructors` is yellow (`DEVELOPING`), and `Inheritance`, `Polymorphism`, and `Dependency Injection` are locked (`LOCKED`).
+ 
+ 2. **Step 2 — Adaptive Question Progression & Bayesian Updating**:
+    - Click **Adaptive Practice**: The system presents a `Constructors` question with explainable rationale ("Weakest eligible prerequisite, all prerequisites satisfied").
+    - Answer the question: Observe the instant Bayesian mastery update (+4.9% on correct answer).
+    - Click **"Explain Concept with AI"**: OpenRouter AI generates an interactive concept breakdown with syntax examples and common pitfalls.
+ 
+ 3. **Step 3 — Login as Student B (Differentiation Proof)**:
+    - Use the demo switcher in the top navbar to switch to **Student B (Bob Martinez)**.
+    - Notice the recommendation: **"Practice Target: Classes"** (40% mastery).
+    - Notice that `Objects` is locked because `Classes` has not yet reached the 65% prerequisite mastery threshold.
+    - **Proof of Adaptivity**: Student A and Student B receive completely different questions and target different concepts based on prerequisite eligibility!
+ 
+ 4. **Step 4 — Trainer Cohort Overview**:
+    - Switch to **Trainer (Dr. Alan Turing)** using the top bar.
+    - Inspect cohort analytics:
+      - Average mastery per concept across the 7 DAG concepts.
+      - Cohort weakest concept identification (`Dependency Injection`, `Polymorphism`, `Inheritance`).
+      - Individual student average mastery comparison.
 
 ---
 

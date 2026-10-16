@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { authService } from '../services/authService';
-import { Lock, Mail, User, Sparkles, CheckCircle2 } from 'lucide-react';
+import { Lock, Mail, Sparkles } from 'lucide-react';
 
 export default function Login() {
   const navigate = useNavigate();
@@ -58,7 +58,7 @@ export default function Login() {
         }}
       >
         {/* Header */}
-        <div style={{ textAlign: 'center', marginBottom: '28px' }}>
+        <div style={{ textAlign: 'center', marginBottom: '24px' }}>
           <div
             style={{
               width: '48px',
@@ -80,7 +80,7 @@ export default function Login() {
             Adaptive Learning Portal
           </h1>
           <p style={{ fontSize: '14px', color: '#64748b', margin: 0 }}>
-            Knowledge Tracing & Sandbox Assessment Platform
+            Phase 2 · Prerequisite Knowledge Tracing & AI Engine
           </p>
         </div>
 
@@ -97,16 +97,16 @@ export default function Login() {
           <div style={{ display: 'flex', alignItems: 'center', gap: '6px', marginBottom: '8px' }}>
             <Sparkles size={14} color="#4f46e5" />
             <span style={{ fontSize: '11px', fontWeight: 700, color: '#334155', textTransform: 'uppercase' }}>
-              Hackathon Demo Quick Fill
+              Phase 2 Demo Accounts (Click to Load)
             </span>
           </div>
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr', gap: '6px' }}>
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr', gap: '8px' }}>
             <button
               type="button"
               onClick={() => setDemoAccount('student.a@adaptive.edu', 'student123')}
               style={{
                 textAlign: 'left',
-                padding: '8px 12px',
+                padding: '10px 12px',
                 borderRadius: '8px',
                 backgroundColor: email === 'student.a@adaptive.edu' ? '#e0e7ff' : '#ffffff',
                 border: email === 'student.a@adaptive.edu' ? '1.5px solid #4f46e5' : '1px solid #cbd5e1',
@@ -114,8 +114,10 @@ export default function Login() {
                 cursor: 'pointer',
               }}
             >
-              <div style={{ fontWeight: 700, color: '#1e293b' }}>Student A (Alice Walker)</div>
-              <div style={{ color: '#64748b', fontSize: '11px' }}>High in Classes/Objects · Weak in Polymorphism</div>
+              <div style={{ fontWeight: 800, color: '#1e293b' }}>Student A (Alice Walker)</div>
+              <div style={{ color: '#4338ca', fontSize: '11px', fontWeight: 600 }}>
+                Classes 90, Objects 85, Constructors 40 → Target: Constructors
+              </div>
             </button>
 
             <button
@@ -123,7 +125,7 @@ export default function Login() {
               onClick={() => setDemoAccount('student.b@adaptive.edu', 'student123')}
               style={{
                 textAlign: 'left',
-                padding: '8px 12px',
+                padding: '10px 12px',
                 borderRadius: '8px',
                 backgroundColor: email === 'student.b@adaptive.edu' ? '#e0e7ff' : '#ffffff',
                 border: email === 'student.b@adaptive.edu' ? '1.5px solid #4f46e5' : '1px solid #cbd5e1',
@@ -131,8 +133,10 @@ export default function Login() {
                 cursor: 'pointer',
               }}
             >
-              <div style={{ fontWeight: 700, color: '#1e293b' }}>Student B (Bob Martinez)</div>
-              <div style={{ color: '#64748b', fontSize: '11px' }}>Mastered through Polymorphism · Targets Dependency Injection</div>
+              <div style={{ fontWeight: 800, color: '#1e293b' }}>Student B (Bob Martinez)</div>
+              <div style={{ color: '#4338ca', fontSize: '11px', fontWeight: 600 }}>
+                Classes 40, Objects 30, Constructors 20 → Target: Classes (Prerequisite)
+              </div>
             </button>
 
             <button
@@ -140,7 +144,7 @@ export default function Login() {
               onClick={() => setDemoAccount('trainer@adaptive.edu', 'trainer123')}
               style={{
                 textAlign: 'left',
-                padding: '8px 12px',
+                padding: '10px 12px',
                 borderRadius: '8px',
                 backgroundColor: email === 'trainer@adaptive.edu' ? '#d1fae5' : '#ffffff',
                 border: email === 'trainer@adaptive.edu' ? '1.5px solid #059669' : '1px solid #cbd5e1',
@@ -148,8 +152,10 @@ export default function Login() {
                 cursor: 'pointer',
               }}
             >
-              <div style={{ fontWeight: 700, color: '#065f46' }}>Trainer (Dr. Alan Turing)</div>
-              <div style={{ color: '#64748b', fontSize: '11px' }}>Access cohort analytics, integrity evidence, and code replays</div>
+              <div style={{ fontWeight: 800, color: '#065f46' }}>Trainer (Dr. Alan Turing)</div>
+              <div style={{ color: '#047857', fontSize: '11px', fontWeight: 600 }}>
+                Course concepts, cohort average mastery, weakest concepts
+              </div>
             </button>
           </div>
         </div>
@@ -173,29 +179,27 @@ export default function Login() {
         {/* Form */}
         <form onSubmit={handleLogin} style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
           <div>
-            <label style={{ display: 'block', fontSize: '13px', fontWeight: 600, color: '#334155', marginBottom: '6px' }}>
+            <label style={{ display: 'block', fontSize: '13px', fontWeight: 700, color: '#334155', marginBottom: '6px' }}>
               Email Address
             </label>
-            <div style={{ position: 'relative' }}>
-              <input
-                type="email"
-                value={email}
-                onChange={(e) => setEmail(e.target.value)}
-                required
-                style={{
-                  width: '100%',
-                  padding: '10px 12px',
-                  borderRadius: '8px',
-                  border: '1px solid #cbd5e1',
-                  fontSize: '14px',
-                  boxSizing: 'border-box',
-                }}
-              />
-            </div>
+            <input
+              type="email"
+              value={email}
+              onChange={(e) => setEmail(e.target.value)}
+              required
+              style={{
+                width: '100%',
+                padding: '10px 12px',
+                borderRadius: '8px',
+                border: '1px solid #cbd5e1',
+                fontSize: '14px',
+                boxSizing: 'border-box',
+              }}
+            />
           </div>
 
           <div>
-            <label style={{ display: 'block', fontSize: '13px', fontWeight: 600, color: '#334155', marginBottom: '6px' }}>
+            <label style={{ display: 'block', fontSize: '13px', fontWeight: 700, color: '#334155', marginBottom: '6px' }}>
               Password
             </label>
             <input
@@ -226,8 +230,7 @@ export default function Login() {
               fontWeight: 700,
               fontSize: '14px',
               cursor: loading ? 'not-allowed' : 'pointer',
-              marginTop: '8px',
-              transition: 'background-color 0.2s',
+              marginTop: '6px',
             }}
           >
             {loading ? 'Authenticating...' : 'Sign In'}

@@ -4,12 +4,9 @@ import { authService } from '../services/authService';
 import {
   LayoutDashboard,
   GitFork,
-  BookOpen,
-  Code2,
-  Users,
-  ShieldAlert,
-  PlayCircle,
   Sparkles,
+  Users,
+  BookOpen,
 } from 'lucide-react';
 
 export default function Sidebar() {
@@ -55,24 +52,20 @@ export default function Sidebar() {
             marginBottom: '8px',
           }}
         >
-          Learning Portal
+          Adaptive Learning
         </div>
         <nav style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
           <NavLink to="/student/dashboard" style={linkStyle}>
             <LayoutDashboard size={18} />
-            Dashboard
+            Learning Dashboard
           </NavLink>
           <NavLink to="/student/concept-map" style={linkStyle}>
             <GitFork size={18} />
-            Concept Graph
+            Visual Concept Map
           </NavLink>
           <NavLink to="/student/learning" style={linkStyle}>
             <Sparkles size={18} />
             Adaptive Practice
-          </NavLink>
-          <NavLink to="/student/assessment" style={linkStyle}>
-            <Code2 size={18} />
-            Coding Assessment
           </NavLink>
         </nav>
       </div>
@@ -90,16 +83,12 @@ export default function Sidebar() {
             marginBottom: '8px',
           }}
         >
-          Trainer Controls
+          Trainer View
         </div>
         <nav style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
           <NavLink to="/trainer/dashboard" style={linkStyle}>
             <Users size={18} />
-            Trainer Overview
-          </NavLink>
-          <NavLink to="/trainer/replay/1" style={linkStyle}>
-            <PlayCircle size={18} />
-            Session Replay
+            Cohort Overview
           </NavLink>
         </nav>
       </div>
@@ -117,11 +106,11 @@ export default function Sidebar() {
         <div style={{ fontSize: '11px', fontWeight: 700, color: '#64748b', textTransform: 'uppercase' }}>
           Active Course
         </div>
-        <div style={{ fontSize: '13px', fontWeight: 700, color: '#1e293b', marginTop: '4px' }}>
-          Object-Oriented Programming
+        <div style={{ fontSize: '13px', fontWeight: 800, color: '#1e293b', marginTop: '4px' }}>
+          Object Oriented Programming
         </div>
         <div style={{ fontSize: '11px', color: '#94a3b8', marginTop: '2px' }}>
-          6 Concepts · 5 Lab Challenges
+          5 Modules · 7 Concepts (DAG)
         </div>
       </div>
     </aside>

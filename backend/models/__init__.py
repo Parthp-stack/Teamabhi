@@ -1,7 +1,7 @@
 from backend.database import Base
 from backend.models.user import User, UserRole
 from backend.models.course import Course, Module
-from backend.models.concept import Concept, concept_prerequisites
+from backend.models.concept import Concept, ConceptPrerequisite
 from backend.models.question import Question, Attempt
 from backend.models.mastery import StudentMastery, MasteryHistory
 from backend.models.coding import CodingProblem, TestCase, CodingSubmission
@@ -16,7 +16,7 @@ __all__ = [
     "Course",
     "Module",
     "Concept",
-    "concept_prerequisites",
+    "ConceptPrerequisite",
     "Question",
     "Attempt",
     "StudentMastery",

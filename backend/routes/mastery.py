@@ -11,13 +11,13 @@ from backend.schemas.mastery import (
     MasteryHistoryResponse,
     StudentMasteryOverview
 )
-from backend.utils.security import get_current_user, require_trainer
+from backend.utils.security import get_current_user
 from backend.services.mastery_service import MasteryService
 
 router = APIRouter(prefix="/mastery", tags=["Mastery"])
 
 def build_student_overview(db: Session, student: User) -> StudentMasteryOverview:
-    concepts = db.query(Concept).all()
+    concepts = db.query(Concept).order_by(Concept.order_index.asc()).all()
     masteries = {
         m.concept_id: m for m in db.query(StudentMastery).filter(
             StudentMastery.student_id == student.id
@@ -29,7 +29,7 @@ def build_student_overview(db: Session, student: User) -> StudentMasteryOverview
 
     for c in concepts:
         m = masteries.get(c.id)
-        score = m.mastery if m else 0.0
+        score = float(m.mastery_score) if m else 0.0
         attempts = m.attempts if m else 0
         correct = m.correct_attempts if m else 0
         total_mastery += score
@@ -43,12 +43,12 @@ def build_student_overview(db: Session, student: User) -> StudentMasteryOverview
             attempts=attempts,
             correct_attempts=correct,
             status=MasteryService.get_concept_status(score, True),
-            updated_at=m.updated_at if m else student.created_at
+            updated_at=m.last_attempt_at if m and m.last_attempt_at else student.created_at
         ))
 
     overall_avg = round(total_mastery / len(concepts), 1) if concepts else 0.0
 
-    weak = [c for c in concept_responses if c.mastery < 65.0]
+    weak = [c for c in concept_responses if c.mastery < 50.0]
     strong = [c for c in concept_responses if c.mastery >= 75.0]
     recommended = weak[0].concept_name if weak else (concept_responses[0].concept_name if concept_responses else None)
 
@@ -72,7 +72,6 @@ def get_student_mastery(
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db)
 ):
-    # If not trainer, student can only view their own
     if current_user.role != "TRAINER" and current_user.id != student_id:
         raise HTTPException(status_code=403, detail="Forbidden")
 
@@ -102,8 +101,8 @@ def get_mastery_history(
             id=r.id,
             concept_id=r.concept_id,
             concept_name=concept.name if concept else f"Concept #{r.concept_id}",
-            mastery=r.mastery,
-            change_amount=r.change_amount,
+            mastery=float(r.mastery_score),
+            change_amount=float(r.change_amount),
             reason=r.reason,
             timestamp=r.timestamp
         ))
@@ -116,13 +115,13 @@ def manual_update_mastery(
     db: Session = Depends(get_db)
 ):
     record = MasteryService.get_or_create_mastery(db, current_user.id, update_data.concept_id)
-    new_score = max(0.0, min(100.0, record.mastery + update_data.score_delta))
-    record.mastery = round(new_score, 1)
+    new_score = max(0.0, min(100.0, float(record.mastery_score) + update_data.score_delta))
+    record.mastery_score = round(new_score, 1)
 
     hist = MasteryHistory(
         student_id=current_user.id,
         concept_id=update_data.concept_id,
-        mastery=record.mastery,
+        mastery_score=record.mastery_score,
         change_amount=update_data.score_delta,
         reason=update_data.reason or "Manual update"
     )
@@ -130,4 +129,4 @@ def manual_update_mastery(
     db.commit()
     db.refresh(record)
 
-    return {"message": "Mastery updated", "concept_id": update_data.concept_id, "new_mastery": record.mastery}
+    return {"message": "Mastery updated", "concept_id": update_data.concept_id, "new_mastery": record.mastery_score}
