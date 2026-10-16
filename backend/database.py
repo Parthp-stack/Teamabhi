@@ -1,12 +1,29 @@
+import urllib.parse
 from sqlalchemy import create_engine
 from sqlalchemy.orm import declarative_base, sessionmaker
 from backend.config import settings
 
+def sanitize_db_url(url: str) -> str:
+    url = url.strip()
+    if url.startswith("postgres://"):
+        # SQLAlchemy 1.4+ / 2.0 requires postgresql:// instead of postgres://
+        url = "postgresql://" + url[len("postgres://"):]
+    
+    # Auto-encode passwords containing special characters (like '@')
+    if "://" in url and url.count("@") > 1:
+        scheme, rest = url.split("://", 1)
+        last_at = rest.rfind("@")
+        userinfo = rest[:last_at]
+        hostpath = rest[last_at + 1:]
+        if ":" in userinfo:
+            user, pwd = userinfo.split(":", 1)
+            sanitized_pwd = urllib.parse.quote_plus(pwd)
+            url = f"{scheme}://{user}:{sanitized_pwd}@{hostpath}"
+            
+    return url
+
 # Determine and sanitize database engine URL and parameters
-db_url = settings.DATABASE_URL.strip()
-if db_url.startswith("postgres://"):
-    # SQLAlchemy 1.4+ / 2.0 requires postgresql:// instead of postgres://
-    db_url = "postgresql://" + db_url[len("postgres://"):]
+db_url = sanitize_db_url(settings.DATABASE_URL)
 
 connect_args = {}
 if db_url.startswith("sqlite"):

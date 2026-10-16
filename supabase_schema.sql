@@ -89,7 +89,7 @@ CREATE TABLE IF NOT EXISTS topics (
 CREATE TABLE IF NOT EXISTS questions (
     id SERIAL PRIMARY KEY,
     concept_id INTEGER NOT NULL REFERENCES concepts(id) ON DELETE CASCADE,
-    topic_id INTEGER REFERENCES topics(id) ON DELETE SET NULL,
+    topic_id INTEGER REFERENCES modules(id) ON DELETE SET NULL,
     question_text TEXT NOT NULL,
     question_type VARCHAR(20) DEFAULT 'MCQ',
     difficulty VARCHAR(20) DEFAULT 'MEDIUM',
@@ -138,8 +138,8 @@ CREATE TABLE IF NOT EXISTS coding_problems (
     created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
 );
 
--- 12. CODING TEST CASES TABLE
-CREATE TABLE IF NOT EXISTS coding_test_cases (
+-- 12. TEST CASES TABLE (backend.models.coding.TestCase)
+CREATE TABLE IF NOT EXISTS test_cases (
     id SERIAL PRIMARY KEY,
     problem_id INTEGER NOT NULL REFERENCES coding_problems(id) ON DELETE CASCADE,
     input TEXT NOT NULL,
@@ -148,6 +148,9 @@ CREATE TABLE IF NOT EXISTS coding_test_cases (
     explanation TEXT,
     weight FLOAT DEFAULT 1.0
 );
+
+-- Backward compatibility view if coding_test_cases is queried
+CREATE OR REPLACE VIEW coding_test_cases AS SELECT * FROM test_cases;
 
 -- 13. CODING SESSIONS TABLE (Sessions Audit)
 CREATE TABLE IF NOT EXISTS sessions (
@@ -265,6 +268,7 @@ CREATE TABLE IF NOT EXISTS assessment_attempts (
     attempt_number INTEGER DEFAULT 1,
     status VARCHAR(50) DEFAULT 'IN_PROGRESS',
     started_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+    ended_at TIMESTAMP WITH TIME ZONE,
     completed_at TIMESTAMP WITH TIME ZONE,
     score FLOAT DEFAULT 0.0,
     questions_attempted INTEGER DEFAULT 0,
@@ -339,6 +343,7 @@ CREATE TABLE IF NOT EXISTS integrity_events (
     risk_level VARCHAR(50) DEFAULT 'NORMAL',
     warning TEXT,
     source VARCHAR(50) DEFAULT 'ASSESSMENT',
+    metadata TEXT,
     event_metadata JSONB,
     timestamp TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
 );
@@ -475,14 +480,14 @@ ON CONFLICT (id) DO NOTHING;
 SELECT setval('coding_problems_id_seq', (SELECT MAX(id) FROM coding_problems));
 
 -- 8. Test Cases for Problem 1
-INSERT INTO coding_test_cases (id, problem_id, input, expected_output, is_hidden, explanation)
+INSERT INTO test_cases (id, problem_id, input, expected_output, is_hidden, explanation)
 VALUES 
     (1, 1, '100\ndeposit 50\nbalance', '150.0\n150.0', FALSE, 'Tests valid deposit operation'),
     (2, 1, '200\nwithdraw 50\nbalance', '150.0\n150.0', FALSE, 'Tests valid withdrawal operation'),
     (3, 1, '500\ndeposit 250\nwithdraw 100\nbalance', '750.0\n650.0\n650.0', TRUE, 'Hidden test case verifying multi-step state mutations')
 ON CONFLICT (id) DO NOTHING;
 
-SELECT setval('coding_test_cases_id_seq', (SELECT MAX(id) FROM coding_test_cases));
+SELECT setval('test_cases_id_seq', (SELECT MAX(id) FROM test_cases));
 
 -- Finished setup notification
 SELECT 'Supabase PostgreSQL schema and seed data initialized successfully!' AS result;
