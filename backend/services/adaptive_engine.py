@@ -232,5 +232,6 @@ class AdaptiveEngine:
             "recommended_next": current_concept,
             "completed_concepts": completed_concepts,
             "weak_concepts": weak_concepts,
-            "concepts": concepts_data
+            "concepts": concepts_data,
+            "path": concepts_data
         }

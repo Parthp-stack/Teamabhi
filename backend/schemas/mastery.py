@@ -20,6 +20,7 @@ class MasteryUpdateRequest(BaseModel):
     concept_id: int
     score_delta: float
     reason: Optional[str] = "Manual update"
+    student_id: Optional[int] = None
 
 class MasteryHistoryResponse(BaseModel):
     id: int

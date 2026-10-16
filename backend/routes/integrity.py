@@ -230,6 +230,13 @@ def get_session_signals(
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db)
 ):
+    session = db.query(CodingSession).filter(CodingSession.id == session_id).first()
+    if not session:
+        raise HTTPException(status_code=404, detail="Session not found")
+
+    if current_user.role == UserRole.STUDENT.value and session.student_id != current_user.id:
+        raise HTTPException(status_code=403, detail="Forbidden: Access restricted")
+
     signals = db.query(IntegritySignal).filter(
         IntegritySignal.session_id == session_id
     ).order_by(IntegritySignal.timestamp.asc()).all()
@@ -242,6 +249,12 @@ def trigger_session_analysis(
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db)
 ):
+    session = db.query(CodingSession).filter(CodingSession.id == session_id).first()
+    if not session:
+        raise HTTPException(status_code=404, detail="Session not found")
+    if current_user.role == UserRole.STUDENT.value and session.student_id != current_user.id:
+        raise HTTPException(status_code=403, detail="Forbidden: Access restricted")
+
     signals = IntegrityService.analyze_session_events(db, session_id)
     return {
         "status": "completed",

@@ -177,6 +177,7 @@ class GitHubEvaluationService:
         avg = round(total_score / len(results), 1) if results else 0.0
         return {
             "overall_score": avg,
+            "evaluations": results,
             "evaluated_answers": results,
             "summary": f"Repository Viva Evaluation Score: {avg}/10."
         }

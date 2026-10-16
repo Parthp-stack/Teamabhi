@@ -232,3 +232,147 @@ async def submit_code(
         memory_used=round(max_mem, 1),
         message=msg
     )
+
+import re
+from pydantic import BaseModel
+
+class DevOpsLabVerifyRequest(BaseModel):
+    task_id: str
+    solution_code: str
+
+@router.post("/devops-lab/verify")
+def verify_devops_lab_task(
+    req: DevOpsLabVerifyRequest,
+    current_user: User = Depends(get_current_user)
+):
+    """
+    Safely verifies browser-based DevOps laboratory assignments without running arbitrary
+    commands directly on host. Uses syntax and directive structure validation.
+    """
+    task_id = req.task_id
+    code = req.solution_code
+    checks = []
+
+    if task_id == "dockerfile_basic":
+        has_from = bool(re.search(r"^\s*FROM\s+python:[\w\.-]+", code, re.M | re.I))
+        checks.append({
+            "check": "Base image uses official Python image (FROM python:...)",
+            "passed": has_from,
+            "detail": "Found valid FROM python instruction" if has_from else "Missing or invalid FROM python instruction"
+        })
+
+        has_workdir = bool(re.search(r"^\s*WORKDIR\s+/\w+", code, re.M | re.I))
+        checks.append({
+            "check": "Sets working directory (WORKDIR /...)",
+            "passed": has_workdir,
+            "detail": "WORKDIR defined" if has_workdir else "Missing WORKDIR instruction"
+        })
+
+        has_req_copy = bool(re.search(r"^\s*COPY\s+requirements\.txt", code, re.M | re.I))
+        has_pip = bool(re.search(r"^\s*RUN\s+pip\s+install", code, re.M | re.I))
+        checks.append({
+            "check": "Copies dependencies and executes pip install",
+            "passed": has_req_copy and has_pip,
+            "detail": "Dependencies properly layered" if (has_req_copy and has_pip) else "Missing COPY requirements.txt or RUN pip install"
+        })
+
+        has_code_copy = bool(re.search(r"^\s*COPY\s+(\.|\w+)\s+(\.|\w+)", code, re.M | re.I))
+        checks.append({
+            "check": "Copies application source code",
+            "passed": has_code_copy,
+            "detail": "Source code copied" if has_code_copy else "Missing COPY instruction"
+        })
+
+        has_expose = bool(re.search(r"^\s*EXPOSE\s+8000", code, re.M | re.I))
+        checks.append({
+            "check": "Exposes application port 8000 (EXPOSE 8000)",
+            "passed": has_expose,
+            "detail": "Port 8000 exposed" if has_expose else "Missing EXPOSE 8000 instruction"
+        })
+
+        has_cmd = bool(re.search(r"^\s*CMD\s+\[.*uvicorn.*\]", code, re.M | re.I))
+        checks.append({
+            "check": "Defines default executable entrypoint (CMD uvicorn)",
+            "passed": has_cmd,
+            "detail": "CMD entrypoint configured" if has_cmd else "Missing CMD with uvicorn start"
+        })
+
+    elif task_id == "dockerfile_multistage":
+        from_matches = re.findall(r"^\s*FROM\s+.*", code, re.M | re.I)
+        has_multistage = len(from_matches) >= 2
+        checks.append({
+            "check": "Implements multi-stage build (multiple FROM statements)",
+            "passed": has_multistage,
+            "detail": f"Found {len(from_matches)} build stages" if has_multistage else "Requires at least 2 FROM statements for multi-stage build"
+        })
+
+        has_env = bool(re.search(r"^\s*ENV\s+PYTHONUNBUFFERED\s*=\s*1|ENV\s+PYTHONDONTWRITEBYTECODE\s*=\s*1", code, re.M | re.I))
+        checks.append({
+            "check": "Configures Python environment (PYTHONUNBUFFERED=1)",
+            "passed": has_env,
+            "detail": "ENV directive present" if has_env else "Missing standard ENV flags"
+        })
+
+        has_user = bool(re.search(r"^\s*USER\s+\w+|RUN\s+useradd|adduser", code, re.M | re.I))
+        checks.append({
+            "check": "Security hardening: Non-root user configuration (USER appuser)",
+            "passed": has_user,
+            "detail": "Non-root execution configured" if has_user else "Missing non-root user instruction"
+        })
+
+        has_expose = bool(re.search(r"^\s*EXPOSE\s+\d+", code, re.M | re.I))
+        checks.append({
+            "check": "Exposes network port",
+            "passed": has_expose,
+            "detail": "Port exposed" if has_expose else "Missing EXPOSE instruction"
+        })
+
+    elif task_id == "ci_workflow":
+        has_triggers = bool(re.search(r"on:\s*\[?.*push.*\]?", code, re.I))
+        checks.append({
+            "check": "Configures workflow trigger (on: [push, pull_request])",
+            "passed": has_triggers,
+            "detail": "Triggers defined" if has_triggers else "Missing on: triggers"
+        })
+
+        has_checkout = bool(re.search(r"actions/checkout@", code, re.I))
+        checks.append({
+            "check": "Includes repository checkout step (actions/checkout)",
+            "passed": has_checkout,
+            "detail": "Checkout step present" if has_checkout else "Missing checkout"
+        })
+
+        has_python_setup = bool(re.search(r"actions/setup-python@", code, re.I))
+        checks.append({
+            "check": "Sets up Python runtime (actions/setup-python)",
+            "passed": has_python_setup,
+            "detail": "Python setup configured" if has_python_setup else "Missing setup"
+        })
+
+        has_test_step = bool(re.search(r"pytest|python -m pytest", code, re.I))
+        checks.append({
+            "check": "Executes automated tests step (pytest)",
+            "passed": has_test_step,
+            "detail": "Test execution step found" if has_test_step else "Missing test command"
+        })
+    else:
+        checks.append({
+            "check": "Known task identifier",
+            "passed": False,
+            "detail": f"Unknown task_id: {task_id}"
+        })
+
+    passed_count = sum(1 for c in checks if c["passed"])
+    total_checks = len(checks)
+    score = round((passed_count / total_checks * 100), 1) if total_checks > 0 else 0.0
+    all_passed = (passed_count == total_checks)
+
+    return {
+        "task_id": task_id,
+        "score": score,
+        "passed_checks": passed_count,
+        "total_checks": total_checks,
+        "all_passed": all_passed,
+        "checks": checks,
+        "feedback": "All DevOps verification criteria satisfied! Excellent container configuration." if all_passed else f"Verified {passed_count}/{total_checks} criteria. Please resolve remaining items."
+    }

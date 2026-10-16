@@ -157,6 +157,96 @@ export default function TrainerStudentDetailPage() {
         </div>
       )}
 
+      {/* Learning Path & Recommendation Summary (Section 9) */}
+      {data?.learning_path && (
+        <div style={{ backgroundColor: '#ffffff', padding: '24px', borderRadius: '14px', border: '1px solid #e5e7eb' }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '14px' }}>
+            <h3 style={{ fontSize: '16px', fontWeight: 800, color: '#111827', margin: 0 }}>
+              Student's Adaptive Learning Path
+            </h3>
+            <span style={{ fontSize: '12px', fontWeight: 700, color: '#4f46e5' }}>
+              Target Concept: {data.learning_path.current_concept}
+            </span>
+          </div>
+
+          <div style={{ display: 'flex', gap: '8px', overflowX: 'auto', paddingBottom: '10px' }}>
+            {data.learning_path.path?.map((step, idx) => (
+              <div
+                key={step.concept_id}
+                style={{
+                  padding: '10px 14px',
+                  borderRadius: '8px',
+                  border: step.is_target ? '2px solid #4f46e5' : '1px solid #e2e8f0',
+                  backgroundColor: step.is_target ? '#eef2ff' : '#f8fafc',
+                  minWidth: '120px',
+                  textAlign: 'center',
+                }}
+              >
+                <div style={{ fontWeight: 800, fontSize: '12px', color: step.is_target ? '#4338ca' : '#1e293b' }}>
+                  {step.concept_name}
+                </div>
+                <div style={{ fontSize: '11px', color: '#64748b', marginTop: '2px' }}>
+                  {step.mastery.toFixed(0)}% · {step.status}
+                </div>
+              </div>
+            ))}
+          </div>
+
+          <div style={{ marginTop: '12px', padding: '10px 14px', backgroundColor: '#f8fafc', borderRadius: '8px', fontSize: '12px', color: '#475569' }}>
+            <strong>Engine Rationale:</strong> {data.learning_path.reason}
+          </div>
+        </div>
+      )}
+
+      {/* Quiz Attempts (Section 9) */}
+      {data?.quiz_attempts && data.quiz_attempts.length > 0 && (
+        <div style={{ backgroundColor: '#ffffff', padding: '24px', borderRadius: '14px', border: '1px solid #e5e7eb' }}>
+          <h3 style={{ fontSize: '16px', fontWeight: 800, color: '#111827', margin: '0 0 16px 0' }}>
+            Recent Quiz Attempts
+          </h3>
+          <table style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left', fontSize: '13px' }}>
+            <thead>
+              <tr style={{ borderBottom: '2px solid #e5e7eb', color: '#64748b' }}>
+                <th style={{ padding: '8px 12px' }}>Question / Concept</th>
+                <th style={{ padding: '8px 12px' }}>Answer</th>
+                <th style={{ padding: '8px 12px' }}>Score</th>
+                <th style={{ padding: '8px 12px' }}>Result</th>
+                <th style={{ padding: '8px 12px' }}>Date</th>
+              </tr>
+            </thead>
+            <tbody>
+              {data.quiz_attempts.map((att) => (
+                <tr key={att.id} style={{ borderBottom: '1px solid #f1f5f9' }}>
+                  <td style={{ padding: '10px 12px' }}>
+                    <div style={{ fontWeight: 600, color: '#0f172a' }}>{att.question_text}</div>
+                    <span style={{ fontSize: '11px', color: '#64748b' }}>{att.concept_name}</span>
+                  </td>
+                  <td style={{ padding: '10px 12px', color: '#475569' }}>{att.selected_answer}</td>
+                  <td style={{ padding: '10px 12px', fontWeight: 700 }}>{att.score}</td>
+                  <td style={{ padding: '10px 12px' }}>
+                    <span
+                      style={{
+                        padding: '2px 6px',
+                        borderRadius: '4px',
+                        fontSize: '11px',
+                        fontWeight: 700,
+                        backgroundColor: att.is_correct ? '#ecfdf5' : '#fef2f2',
+                        color: att.is_correct ? '#047857' : '#b91c1c',
+                      }}
+                    >
+                      {att.is_correct ? 'CORRECT' : 'INCORRECT'}
+                    </span>
+                  </td>
+                  <td style={{ padding: '10px 12px', color: '#64748b', fontSize: '12px' }}>
+                    {new Date(att.timestamp).toLocaleDateString()}
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
+
       {/* Coding Submissions & Viva Comprehension Scores */}
       <div style={{ backgroundColor: '#ffffff', padding: '24px', borderRadius: '14px', border: '1px solid #e5e7eb' }}>
         <h3 style={{ fontSize: '16px', fontWeight: 800, color: '#111827', margin: '0 0 16px 0' }}>
@@ -220,11 +310,34 @@ export default function TrainerStudentDetailPage() {
         )}
       </div>
 
-      {/* Recorded Sessions & Integrity Replay Links */}
+      {/* Recorded Sessions & Integrity Dashboard Link (Section 9 & 10) */}
       <div style={{ backgroundColor: '#ffffff', padding: '24px', borderRadius: '14px', border: '1px solid #e5e7eb' }}>
-        <h3 style={{ fontSize: '16px', fontWeight: 800, color: '#111827', margin: '0 0 16px 0' }}>
-          Recorded Assessment Sessions (Evidence Timelines)
-        </h3>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px' }}>
+          <div>
+            <h3 style={{ fontSize: '16px', fontWeight: 800, color: '#111827', margin: 0 }}>
+              Recorded Assessment Sessions (Evidence Timelines)
+            </h3>
+            <p style={{ margin: '2px 0 0 0', fontSize: '12px', color: '#64748b' }}>
+              Full session audit trails, typing rhythms, and human review evidence
+            </p>
+          </div>
+          <button
+            onClick={() => navigate(`/trainer/integrity?student_id=${data?.student?.id}`)}
+            style={{
+              padding: '6px 12px',
+              backgroundColor: '#eef2ff',
+              color: '#4f46e5',
+              border: '1px solid #c7d2fe',
+              borderRadius: '6px',
+              fontSize: '12px',
+              fontWeight: 700,
+              cursor: 'pointer',
+            }}
+          >
+            Open in Integrity Dashboard →
+          </button>
+        </div>
+
         <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
           {data?.sessions?.map((sess) => (
             <div
@@ -244,28 +357,30 @@ export default function TrainerStudentDetailPage() {
                   Session #{sess.id} · {sess.problem_title}
                 </span>
                 <div style={{ fontSize: '12px', color: '#64748b', marginTop: '2px' }}>
-                  {sess.total_events} recorded events · {sess.signals_count} integrity signals
+                  {sess.total_events} recorded events · {sess.signals_count} integrity signals · Review Status: <strong>{sess.overall_review_status}</strong>
                 </div>
               </div>
 
-              <button
-                onClick={() => navigate(`/trainer/replay/${sess.id}`)}
-                style={{
-                  display: 'flex',
-                  alignItems: 'center',
-                  gap: '6px',
-                  padding: '8px 14px',
-                  backgroundColor: '#4f46e5',
-                  color: '#ffffff',
-                  border: 'none',
-                  borderRadius: '6px',
-                  fontSize: '12px',
-                  fontWeight: 600,
-                  cursor: 'pointer',
-                }}
-              >
-                <PlayCircle size={14} /> View Replay & Signals
-              </button>
+              <div style={{ display: 'flex', gap: '8px' }}>
+                <button
+                  onClick={() => navigate(`/trainer/replay/${sess.id}`)}
+                  style={{
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '6px',
+                    padding: '8px 14px',
+                    backgroundColor: '#4f46e5',
+                    color: '#ffffff',
+                    border: 'none',
+                    borderRadius: '6px',
+                    fontSize: '12px',
+                    fontWeight: 600,
+                    cursor: 'pointer',
+                  }}
+                >
+                  <PlayCircle size={14} /> Full Replay Studio
+                </button>
+              </div>
             </div>
           ))}
         </div>

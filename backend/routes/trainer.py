@@ -292,19 +292,19 @@ def get_student_deep_dive(
     # Recorded assessment sessions with link to Phase 3 integrity
     sessions = db.query(AssessmentSession).filter(
         AssessmentSession.student_id == student_id
-    ).order_by(AssessmentSession.created_at.desc()).all()
+    ).order_by(AssessmentSession.started_at.desc()).all()
 
     sessions_data = [
         {
             "id": s.id,
             "assessment_id": s.assessment_id,
-            "problem_title": s.assessment.title if s.assessment else f"Assessment #{s.assessment_id}",
-            "total_events": len(s.events),
-            "signals_count": len(s.signals),
+            "problem_title": s.problem.title if s.problem else f"Assessment #{s.assessment_id}",
+            "total_events": len(s.events) if s.events else 0,
+            "signals_count": len(s.integrity_signals) if s.integrity_signals else 0,
             "overall_review_status": s.overall_review_status or "UNREVIEWED",
             "is_reviewed": s.is_reviewed or False,
             "review_notes": s.review_notes,
-            "created_at": s.created_at.isoformat()
+            "created_at": s.started_at.isoformat() if s.started_at else None
         }
         for s in sessions
     ]
@@ -329,6 +329,58 @@ def get_student_deep_dive(
 # ==========================================
 # 3. CURRICULUM MANAGEMENT (COURSES, MODULES, CONCEPTS)
 # ==========================================
+@router.get("/curriculum")
+def get_curriculum_management(
+    trainer: User = Depends(require_trainer),
+    db: Session = Depends(get_db)
+):
+    courses = db.query(Course).all()
+    modules = db.query(Module).order_by(Module.order_index.asc()).all()
+    concepts = db.query(Concept).order_by(Concept.order_index.asc()).all()
+
+    concept_list = []
+    for c in concepts:
+        q_count = db.query(Question).filter(Question.concept_id == c.id).count()
+        concept_list.append({
+            "id": c.id,
+            "module_id": c.module_id,
+            "name": c.name,
+            "description": c.description,
+            "difficulty": c.difficulty,
+            "order_index": c.order_index,
+            "question_count": q_count,
+            "prerequisites": [{"id": p.id, "name": p.name} for p in c.prerequisites],
+            "dependents": [{"id": d.id, "name": d.name} for d in c.dependents]
+        })
+
+    return {
+        "courses": [
+            {
+                "id": crs.id,
+                "title": crs.title,
+                "description": crs.description,
+                "modules": [
+                    {
+                        "id": m.id,
+                        "title": m.title,
+                        "description": m.description,
+                        "order_index": m.order_index
+                    } for m in crs.modules
+                ]
+            } for crs in courses
+        ],
+        "modules": [
+            {
+                "id": m.id,
+                "course_id": m.course_id,
+                "title": m.title,
+                "description": m.description,
+                "order_index": m.order_index
+            } for m in modules
+        ],
+        "concepts": concept_list
+    }
+
 @router.post("/courses")
 def create_course(
     req: CourseCreateRequest,

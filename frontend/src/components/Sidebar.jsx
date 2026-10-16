@@ -8,6 +8,8 @@ import {
   Users,
   Code2,
   ShieldAlert,
+  FolderTree,
+  GitBranch,
 } from 'lucide-react';
 
 export default function Sidebar() {
@@ -98,6 +100,14 @@ export default function Sidebar() {
           <NavLink to="/trainer/integrity" style={linkStyle}>
             <ShieldAlert size={18} />
             Integrity Dashboard
+          </NavLink>
+          <NavLink to="/trainer/curriculum" style={linkStyle}>
+            <FolderTree size={18} />
+            Course & Question Bank
+          </NavLink>
+          <NavLink to="/trainer/repo-eval" style={linkStyle}>
+            <GitBranch size={18} />
+            Repo Eval & DevOps
           </NavLink>
         </nav>
       </div>

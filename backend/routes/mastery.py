@@ -11,7 +11,7 @@ from backend.schemas.mastery import (
     MasteryHistoryResponse,
     StudentMasteryOverview
 )
-from backend.utils.security import get_current_user
+from backend.utils.security import get_current_user, require_trainer
 from backend.services.mastery_service import MasteryService
 
 router = APIRouter(prefix="/mastery", tags=["Mastery"])
@@ -111,22 +111,23 @@ def get_mastery_history(
 @router.post("/update")
 def manual_update_mastery(
     update_data: MasteryUpdateRequest,
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(require_trainer),
     db: Session = Depends(get_db)
 ):
-    record = MasteryService.get_or_create_mastery(db, current_user.id, update_data.concept_id)
+    target_student_id = update_data.student_id or current_user.id
+    record = MasteryService.get_or_create_mastery(db, target_student_id, update_data.concept_id)
     new_score = max(0.0, min(100.0, float(record.mastery_score) + update_data.score_delta))
     record.mastery_score = round(new_score, 1)
 
     hist = MasteryHistory(
-        student_id=current_user.id,
+        student_id=target_student_id,
         concept_id=update_data.concept_id,
         mastery_score=record.mastery_score,
         change_amount=update_data.score_delta,
-        reason=update_data.reason or "Manual update"
+        reason=update_data.reason or f"Trainer manual adjustment ({current_user.name})"
     )
     db.add(hist)
     db.commit()
     db.refresh(record)
 
-    return {"message": "Mastery updated", "concept_id": update_data.concept_id, "new_mastery": record.mastery_score}
+    return {"message": "Mastery updated", "student_id": target_student_id, "concept_id": update_data.concept_id, "new_mastery": record.mastery_score}

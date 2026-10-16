@@ -12,6 +12,8 @@ import TrainerDashboard from './pages/TrainerDashboard';
 import TrainerStudentDetailPage from './pages/TrainerStudentDetailPage';
 import SessionReplayPage from './pages/SessionReplayPage';
 import CodingIntegrityDashboard from './pages/CodingIntegrityDashboard';
+import CurriculumManagementPage from './pages/CurriculumManagementPage';
+import RepoEvaluationDevOpsPage from './pages/RepoEvaluationDevOpsPage';
 import { authService } from './services/authService';
 
 // Layout wrapper for authenticated views
@@ -146,6 +148,26 @@ export default function App() {
             <AppLayout>
               <TrainerRoute>
                 <CodingIntegrityDashboard />
+              </TrainerRoute>
+            </AppLayout>
+          }
+        />
+        <Route
+          path="/trainer/curriculum"
+          element={
+            <AppLayout>
+              <TrainerRoute>
+                <CurriculumManagementPage />
+              </TrainerRoute>
+            </AppLayout>
+          }
+        />
+        <Route
+          path="/trainer/repo-eval"
+          element={
+            <AppLayout>
+              <TrainerRoute>
+                <RepoEvaluationDevOpsPage />
               </TrainerRoute>
             </AppLayout>
           }
