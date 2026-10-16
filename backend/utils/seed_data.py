@@ -3,7 +3,8 @@ from datetime import datetime, timezone, timedelta
 from backend.models.user import User, UserRole
 from backend.models.course import Course, Module
 from backend.models.concept import Concept, ConceptPrerequisite
-from backend.models.question import Question
+from backend.models.question import Question, Attempt
+from backend.models.explanation import ExplanationQuestion, ExplanationAnswer
 from backend.models.mastery import StudentMastery, MasteryHistory
 from backend.models.coding import CodingProblem, TestCase, CodingSubmission
 from backend.models.session import Session as CodingSession, SessionEvent, CodeRevision
@@ -19,6 +20,7 @@ def seed_database(db: Session):
             student_b = db.query(User).filter(User.email == "student.b@adaptive.edu").first()
             if student_a and student_b:
                 seed_coding_and_integrity(db, student_a, student_b)
+        seed_phase4_assessments_and_submissions(db)
         return
 
     print("[Seed Phase 2] Seeding initial database for Adaptive Learning & AI...")
@@ -729,6 +731,224 @@ Subsequent Lines: Commands e.g. "deposit 50.0", "withdraw 20.0", "balance"
     db.commit()
 
     print("[Seed Phase 3] Successfully seeded Course, 5 Modules, 7 Concepts, 35 Questions, Coding Problem & Test Cases, and 3 Demo Integrity Sessions.")
+    seed_phase4_assessments_and_submissions(db)
+
+def seed_phase4_assessments_and_submissions(db: Session):
+    student_a = db.query(User).filter(User.email == "student.a@adaptive.edu").first()
+    student_b = db.query(User).filter(User.email == "student.b@adaptive.edu").first()
+    prob = db.query(CodingProblem).first()
+
+    if not student_a or not student_b or not prob:
+        return
+
+    now = datetime.now(timezone.utc)
+
+    # 1. Seed Submissions & Viva Voce Evaluations if absent
+    if db.query(CodingSubmission).count() == 0:
+        sub_a1 = CodingSubmission(
+            student_id=student_a.id,
+            problem_id=prob.id,
+            language="python",
+            source_code='''class BankAccount:
+    def __init__(self, account_holder: str, initial_balance: float = 0.0):
+        if initial_balance < 0:
+            raise ValueError("Initial balance cannot be negative")
+        self._holder = account_holder
+        self._balance = initial_balance
+
+    def deposit(self, amount: float) -> float:
+        if amount <= 0:
+            raise ValueError("Deposit must be positive")
+        self._balance += amount
+        return self._balance
+
+    def withdraw(self, amount: float) -> float:
+        if amount <= 0 or amount > self._balance:
+            raise ValueError("Invalid withdrawal amount")
+        self._balance -= amount
+        return self._balance
+
+    def get_balance(self) -> float:
+        return self._balance
+''',
+            status="PASSED",
+            score=100.0,
+            execution_time=0.045,
+            memory_used=14.2,
+            created_at=now - timedelta(hours=3)
+        )
+        db.add(sub_a1)
+        db.commit()
+        db.refresh(sub_a1)
+
+        # Attach viva questions and evaluations for sub_a1
+        vq1 = ExplanationQuestion(
+            submission_id=sub_a1.id,
+            question="How does your implementation enforce encapsulation of the account balance?",
+            expected_concept="Encapsulation and private state mutation"
+        )
+        vq2 = ExplanationQuestion(
+            submission_id=sub_a1.id,
+            question="What happens in memory and state when an invalid withdrawal is attempted?",
+            expected_concept="Exception handling and invariant preservation"
+        )
+        db.add_all([vq1, vq2])
+        db.commit()
+        db.refresh(vq1)
+        db.refresh(vq2)
+
+        ans1 = ExplanationAnswer(
+            explanation_question_id=vq1.id,
+            student_answer="I prefixed _balance with an underscore to designate it as an internal encapsulated attribute and only mutate it through validated deposit/withdraw methods.",
+            evaluation="Strong technical grasp of state encapsulation and boundary defense.",
+            score=9.5
+        )
+        ans2 = ExplanationAnswer(
+            explanation_question_id=vq2.id,
+            student_answer="A ValueError is raised before any mutation occurs, ensuring that the balance remains invariant and transactionally consistent.",
+            evaluation="Clear explanation of exception handling preserving class state.",
+            score=9.0
+        )
+        db.add_all([ans1, ans2])
+
+        # Student B submission
+        sub_b1 = CodingSubmission(
+            student_id=student_b.id,
+            problem_id=prob.id,
+            language="python",
+            source_code='''class BankAccount:
+    def __init__(self, holder, balance=0):
+        self.holder = holder
+        self.balance = balance
+    def deposit(self, amt):
+        self.balance += amt
+        return self.balance
+    def withdraw(self, amt):
+        if amt <= self.balance:
+            self.balance -= amt
+        return self.balance
+    def get_balance(self):
+        return self.balance
+''',
+            status="PASSED",
+            score=75.0,
+            execution_time=0.048,
+            memory_used=14.1,
+            created_at=now - timedelta(hours=6)
+        )
+        db.add(sub_b1)
+        db.commit()
+        db.refresh(sub_b1)
+
+        vq_b1 = ExplanationQuestion(
+            submission_id=sub_b1.id,
+            question="Why is direct attribute access to balance risky in multi-component systems?",
+            expected_concept="Encapsulation"
+        )
+        db.add(vq_b1)
+        db.commit()
+        db.refresh(vq_b1)
+
+        ans_b1 = ExplanationAnswer(
+            explanation_question_id=vq_b1.id,
+            student_answer="Because external code could set balance to negative without validation.",
+            evaluation="Accurate basic identification of invariant violation risk.",
+            score=7.0
+        )
+        db.add(ans_b1)
+        db.commit()
+
+    # 2. Seed Quiz Attempts if absent
+    if db.query(Attempt).count() == 0:
+        questions = db.query(Question).all()
+        q_map = {q.concept.name: q for q in questions if q.concept}
+
+        attempts_list = []
+        # Student A attempts (advanced in Basics, Classes, Objects, struggling on Inheritance)
+        if "Classes" in q_map:
+            attempts_list.append(Attempt(
+                student_id=student_a.id,
+                question_id=q_map["Classes"].id,
+                selected_answer=q_map["Classes"].correct_answer,
+                is_correct=True,
+                score=1.0,
+                time_taken=14.2,
+                created_at=now - timedelta(days=2, hours=4)
+            ))
+        if "Objects" in q_map:
+            attempts_list.append(Attempt(
+                student_id=student_a.id,
+                question_id=q_map["Objects"].id,
+                selected_answer=q_map["Objects"].correct_answer,
+                is_correct=True,
+                score=1.0,
+                time_taken=18.5,
+                created_at=now - timedelta(days=1, hours=8)
+            ))
+        if "Constructors" in q_map:
+            attempts_list.append(Attempt(
+                student_id=student_a.id,
+                question_id=q_map["Constructors"].id,
+                selected_answer=q_map["Constructors"].correct_answer,
+                is_correct=True,
+                score=1.0,
+                time_taken=22.0,
+                created_at=now - timedelta(hours=14)
+            ))
+        if "Inheritance" in q_map:
+            attempts_list.append(Attempt(
+                student_id=student_a.id,
+                question_id=q_map["Inheritance"].id,
+                selected_answer="Incorrect option",
+                is_correct=False,
+                score=0.0,
+                time_taken=28.4,
+                created_at=now - timedelta(hours=2)
+            ))
+
+        # Student B attempts (good in Basics, struggling on Classes/Objects)
+        if "Programming Basics" in q_map:
+            attempts_list.append(Attempt(
+                student_id=student_b.id,
+                question_id=q_map["Programming Basics"].id,
+                selected_answer=q_map["Programming Basics"].correct_answer,
+                is_correct=True,
+                score=1.0,
+                time_taken=11.0,
+                created_at=now - timedelta(days=1, hours=10)
+            ))
+        if "Classes" in q_map:
+            attempts_list.append(Attempt(
+                student_id=student_b.id,
+                question_id=q_map["Classes"].id,
+                selected_answer="Incorrect option",
+                is_correct=False,
+                score=0.0,
+                time_taken=25.0,
+                created_at=now - timedelta(hours=5)
+            ))
+
+        db.add_all(attempts_list)
+        db.commit()
+
+    # 3. Ensure MasteryHistory has rich progression points
+    hist_count_a = db.query(MasteryHistory).filter(MasteryHistory.student_id == student_a.id).count()
+    if hist_count_a < 4:
+        concept_classes = db.query(Concept).filter(Concept.name == "Classes").first()
+        concept_constructors = db.query(Concept).filter(Concept.name == "Constructors").first()
+        cid1 = concept_classes.id if concept_classes else 2
+        cid2 = concept_constructors.id if concept_constructors else 4
+
+        progression_a = [
+            MasteryHistory(student_id=student_a.id, concept_id=cid1, mastery_score=50.0, change_amount=50.0, reason="Initial Diagnostic", timestamp=now - timedelta(days=3)),
+            MasteryHistory(student_id=student_a.id, concept_id=cid1, mastery_score=72.0, change_amount=22.0, reason="Correct Quiz Attempt", timestamp=now - timedelta(days=2)),
+            MasteryHistory(student_id=student_a.id, concept_id=cid1, mastery_score=90.0, change_amount=18.0, reason="Advanced Concept Practice", timestamp=now - timedelta(days=1)),
+            MasteryHistory(student_id=student_a.id, concept_id=cid2, mastery_score=80.0, change_amount=40.0, reason="Constructors Coding Lab", timestamp=now - timedelta(hours=12))
+        ]
+        db.add_all(progression_a)
+        db.commit()
+
+    print("[Seed Phase 4] Successfully ensured rich student quiz attempts, coding submissions, viva evaluations, and historical knowledge tracing.")
 
 if __name__ == "__main__":
     from backend.database import SessionLocal

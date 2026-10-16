@@ -84,6 +84,15 @@ class AIService:
         return cls._fallback_generate_question(concept, difficulty, question_type)
 
     @classmethod
+    async def generate_assessment_question(
+        cls,
+        concept_name: str,
+        difficulty: str = "MEDIUM",
+        question_type: str = "MCQ"
+    ) -> Dict[str, Any]:
+        return await cls.generate_question(concept=concept_name, difficulty=difficulty, question_type=question_type)
+
+    @classmethod
     async def explain_concept(
         cls,
         concept: str,

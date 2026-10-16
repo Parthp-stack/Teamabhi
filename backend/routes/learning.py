@@ -6,7 +6,9 @@ from backend.database import get_db
 from backend.models.user import User
 from backend.models.question import Question, Attempt
 from backend.models.concept import Concept
-from backend.models.mastery import StudentMastery
+from backend.models.coding import CodingSubmission, CodingProblem
+from backend.models.explanation import ExplanationQuestion, ExplanationAnswer
+from backend.models.mastery import StudentMastery, MasteryHistory
 from backend.utils.security import get_current_user
 from backend.services.adaptive_engine import AdaptiveEngine
 from backend.services.mastery_service import MasteryService
@@ -205,3 +207,180 @@ def get_adaptive_learning_path(
     Returns the student's dynamic learning path overview.
     """
     return AdaptiveEngine.get_learning_path(db, current_user.id)
+
+# 6. GET /api/student/history (Quiz assessment history)
+@router.get("/student/history")
+@router.get("/student/assessments")
+def get_student_assessment_history(
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    """
+    Returns student's past quiz attempts. Excludes hidden tests or trainer-only data.
+    """
+    attempts = db.query(Attempt).filter(
+        Attempt.student_id == current_user.id
+    ).order_by(Attempt.created_at.desc()).all()
+
+    results = []
+    for a in attempts:
+        results.append({
+            "id": a.id,
+            "question_id": a.question_id,
+            "question_text": a.question.question_text if a.question else "Question",
+            "concept_name": a.question.concept.name if a.question and a.question.concept else "Concept",
+            "selected_answer": a.selected_answer,
+            "correct_answer": a.question.correct_answer if a.question else "",
+            "is_correct": a.is_correct,
+            "score": a.score,
+            "time_taken": a.time_taken,
+            "timestamp": a.created_at.isoformat(),
+            "explanation": a.question.explanation if a.question else None
+        })
+    return {"total": len(results), "attempts": results}
+
+# 7. GET /api/student/coding-history
+@router.get("/student/coding-history")
+def get_student_coding_history(
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    """
+    Returns student's past coding submissions. Never exposes hidden test cases or trainer audit records.
+    """
+    subs = db.query(CodingSubmission).filter(
+        CodingSubmission.student_id == current_user.id
+    ).order_by(CodingSubmission.created_at.desc()).all()
+
+    results = []
+    for s in subs:
+        # Load viva voce questions and answers
+        viva_q_list = db.query(ExplanationQuestion).filter(ExplanationQuestion.submission_id == s.id).all()
+        viva_details = []
+        total_viva_score = 0.0
+        for vq in viva_q_list:
+            ans = db.query(ExplanationAnswer).filter(ExplanationAnswer.explanation_question_id == vq.id).first()
+            if ans:
+                total_viva_score += ans.score
+                viva_details.append({
+                    "question_id": vq.id,
+                    "question": vq.question,
+                    "student_answer": ans.student_answer,
+                    "evaluation": ans.evaluation,
+                    "score": ans.score
+                })
+            else:
+                viva_details.append({
+                    "question_id": vq.id,
+                    "question": vq.question,
+                    "student_answer": None,
+                    "evaluation": "Awaiting response",
+                    "score": 0.0
+                })
+
+        avg_viva = round(total_viva_score / len(viva_details), 1) if viva_details and any(v["student_answer"] for v in viva_details) else None
+
+        results.append({
+            "id": s.id,
+            "problem_id": s.problem_id,
+            "problem_title": s.problem.title if s.problem else f"Problem #{s.problem_id}",
+            "language": s.language,
+            "status": s.status,
+            "score": s.score,
+            "execution_time": s.execution_time,
+            "memory_used": s.memory_used,
+            "timestamp": s.created_at.isoformat(),
+            "viva_score": avg_viva,
+            "viva_details": viva_details
+        })
+
+    return {"total": len(results), "submissions": results}
+
+# 8. GET /api/student/analytics
+@router.get("/student/analytics")
+def get_student_analytics(
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    """
+    Structured analytics for charts:
+    - Mastery progression over time
+    - Performance by difficulty (EASY, MEDIUM, HARD)
+    - Attempts and accuracy per concept
+    - Actionable recommendations based on weak concepts
+    """
+    concepts = db.query(Concept).order_by(Concept.order_index.asc()).all()
+    masteries = {m.concept_id: m for m in db.query(StudentMastery).filter(StudentMastery.student_id == current_user.id).all()}
+    
+    total_score = sum(float(m.mastery_score) for m in masteries.values())
+    overall_mastery = round(total_score / len(concepts), 1) if concepts else 0.0
+
+    # Progression timeline from MasteryHistory
+    history = db.query(MasteryHistory).filter(
+        MasteryHistory.student_id == current_user.id
+    ).order_by(MasteryHistory.timestamp.asc()).all()
+
+    progression = [
+        {
+            "timestamp": h.timestamp.isoformat(),
+            "mastery": float(h.mastery_score),
+            "concept_id": h.concept_id,
+            "reason": h.reason
+        }
+        for h in history
+    ]
+
+    # Difficulty breakdown
+    attempts = db.query(Attempt).filter(Attempt.student_id == current_user.id).all()
+    diff_stats = {
+        "EASY": {"total": 0, "correct": 0, "accuracy": 0.0},
+        "MEDIUM": {"total": 0, "correct": 0, "accuracy": 0.0},
+        "HARD": {"total": 0, "correct": 0, "accuracy": 0.0}
+    }
+
+    for a in attempts:
+        diff = a.question.difficulty.upper() if a.question and a.question.difficulty else "MEDIUM"
+        if diff in diff_stats:
+            diff_stats[diff]["total"] += 1
+            if a.is_correct:
+                diff_stats[diff]["correct"] += 1
+
+    for d in diff_stats.values():
+        d["accuracy"] = round((d["correct"] / d["total"] * 100), 1) if d["total"] > 0 else 0.0
+
+    # Attempts per concept
+    concept_breakdown = []
+    recommendations = []
+
+    for c in concepts:
+        m = masteries.get(c.id)
+        score = float(m.mastery_score) if m else 0.0
+        attempts_c = m.attempts if m else 0
+        correct_c = m.correct_attempts if m else 0
+        acc = round((correct_c / attempts_c * 100), 1) if attempts_c > 0 else 0.0
+
+        concept_breakdown.append({
+            "concept_id": c.id,
+            "concept_name": c.name,
+            "mastery": score,
+            "attempts": attempts_c,
+            "correct_attempts": correct_c,
+            "accuracy": acc
+        })
+
+        if score < 50.0:
+            recommendations.append({
+                "concept_id": c.id,
+                "concept_name": c.name,
+                "mastery": score,
+                "message": f"You have low mastery in {c.name} ({score}%). Recommended: Practice {max(3, 5 - attempts_c)} targeted questions.",
+                "action": f"Practice {c.name}"
+            })
+
+    return {
+        "overall_mastery": overall_mastery,
+        "mastery_progression": progression,
+        "difficulty_performance": diff_stats,
+        "attempts_per_concept": concept_breakdown,
+        "recommendations": recommendations
+    }
