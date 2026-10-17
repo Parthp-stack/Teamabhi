@@ -108,6 +108,97 @@ export default function Login() {
   // Info Modal states for top nav
   const [activeModal, setActiveModal] = useState(null); // 'features' | 'about' | 'contact' | 'forgot' | null
 
+  // Forgot Password flow states
+  const [resetStep, setResetStep] = useState(1); // 1: verify email, 2: enter new password, 3: completed
+  const [resetEmail, setResetEmail] = useState('');
+  const [resetVerifiedUser, setResetVerifiedUser] = useState(null);
+  const [resetNewPassword, setResetNewPassword] = useState('');
+  const [resetConfirmPassword, setResetConfirmPassword] = useState('');
+  const [resetShowNewPassword, setResetShowNewPassword] = useState(false);
+  const [resetShowConfirmPassword, setResetShowConfirmPassword] = useState(false);
+  const [resetLoading, setResetLoading] = useState(false);
+  const [resetError, setResetError] = useState('');
+  const [resetSuccess, setResetSuccess] = useState('');
+
+  const handleOpenForgotModal = () => {
+    setResetEmail(email || '');
+    setResetStep(1);
+    setResetVerifiedUser(null);
+    setResetNewPassword('');
+    setResetConfirmPassword('');
+    setResetShowNewPassword(false);
+    setResetShowConfirmPassword(false);
+    setResetLoading(false);
+    setResetError('');
+    setResetSuccess('');
+    setActiveModal('forgot');
+  };
+
+  const handleVerifyEmail = async (e) => {
+    if (e) e.preventDefault();
+    if (!resetEmail.trim()) {
+      setResetError('Please enter your registered email address.');
+      return;
+    }
+    setResetLoading(true);
+    setResetError('');
+    try {
+      const data = await authService.verifyResetEmail(resetEmail.trim(), activeRole);
+      setResetVerifiedUser(data);
+      setResetStep(2);
+    } catch (err) {
+      if (!err.response) {
+        setResetError('Cannot connect to backend server. Ensure backend is running.');
+      } else {
+        setResetError(err.response?.data?.detail || 'No account found with this email in the database.');
+      }
+    } finally {
+      setResetLoading(false);
+    }
+  };
+
+  const handleResetPassword = async (e) => {
+    if (e) e.preventDefault();
+    setResetError('');
+
+    if (resetNewPassword.length < 6) {
+      setResetError('New password must be at least 6 characters long.');
+      return;
+    }
+    if (resetNewPassword !== resetConfirmPassword) {
+      setResetError('Passwords do not match. Please re-enter.');
+      return;
+    }
+
+    setResetLoading(true);
+    try {
+      const data = await authService.resetPassword(resetEmail.trim(), resetNewPassword, resetVerifiedUser?.role);
+      setResetSuccess(data.message || 'Password successfully updated!');
+      setResetStep(3);
+    } catch (err) {
+      if (!err.response) {
+        setResetError('Cannot connect to backend server. Ensure backend is running.');
+      } else {
+        setResetError(err.response?.data?.detail || 'Failed to update password. Please try again.');
+      }
+    } finally {
+      setResetLoading(false);
+    }
+  };
+
+  const handleApplyNewPasswordAndLogin = () => {
+    setEmail(resetEmail.trim());
+    setPassword(resetNewPassword);
+    if (resetVerifiedUser?.role) {
+      setActiveRole(resetVerifiedUser.role);
+    }
+    setIsRegistering(false);
+    setError('');
+    setSuccessMsg('Password updated successfully! Click "Sign In" to continue.');
+    setActiveModal(null);
+  };
+
+
   const handleAuth = async (e) => {
     if (e) e.preventDefault();
     setLoading(true);
@@ -437,7 +528,7 @@ export default function Login() {
                   <button
                     type="button"
                     className="login-forgot-btn"
-                    onClick={() => setActiveModal('forgot')}
+                    onClick={handleOpenForgotModal}
                   >
                     Forgot Password?
                   </button>
@@ -549,7 +640,7 @@ export default function Login() {
                   {activeModal === 'features' && 'Platform Features'}
                   {activeModal === 'about' && 'About AdaptIQ'}
                   {activeModal === 'contact' && 'Academic Support'}
-                  {activeModal === 'forgot' && 'Reset Password'}
+                  {activeModal === 'forgot' && 'Reset Account Password'}
                 </h3>
               </div>
               <button
@@ -586,29 +677,200 @@ export default function Login() {
             )}
 
             {activeModal === 'forgot' && (
-              <div style={{ fontSize: '14px', color: '#475569', lineHeight: 1.6 }}>
-                <p>For this academic prototype portal, password resets are handled via your department administrator or demo accounts.</p>
-                <p>Standard demo passwords are set to <code>student123</code> for students and <code>trainer123</code> for trainers.</p>
-                <button
-                  type="button"
-                  onClick={() => {
-                    setPassword(activeRole === 'STUDENT' ? 'student123' : 'trainer123');
-                    setActiveModal(null);
-                  }}
-                  style={{
-                    marginTop: '12px',
-                    width: '100%',
-                    padding: '10px',
-                    borderRadius: '8px',
-                    border: 'none',
-                    backgroundColor: '#4f46e5',
-                    color: '#ffffff',
-                    fontWeight: 700,
-                    cursor: 'pointer'
-                  }}
-                >
-                  Autofill Default Password
-                </button>
+              <div className="forgot-modal-content">
+                {/* 3-Step Progress Header */}
+                <div className="forgot-steps-bar">
+                  <div className={`forgot-step-chip ${resetStep >= 1 ? 'active' : ''}`}>
+                    <span className="forgot-step-num">1</span>
+                    <span>Verify Email</span>
+                  </div>
+                  <div className="forgot-step-line" />
+                  <div className={`forgot-step-chip ${resetStep >= 2 ? 'active' : ''}`}>
+                    <span className="forgot-step-num">2</span>
+                    <span>New Password</span>
+                  </div>
+                  <div className="forgot-step-line" />
+                  <div className={`forgot-step-chip ${resetStep >= 3 ? 'active' : ''}`}>
+                    <span className="forgot-step-num">3</span>
+                    <span>Done</span>
+                  </div>
+                </div>
+
+                {resetError && (
+                  <div className="login-alert login-alert-error" style={{ marginBottom: '14px' }}>
+                    <AlertCircle size={16} />
+                    <span>{resetError}</span>
+                  </div>
+                )}
+
+                {/* Step 1: Search and Verify Registered Email */}
+                {resetStep === 1 && (
+                  <form onSubmit={handleVerifyEmail}>
+                    <p style={{ fontSize: '13.5px', color: '#64748b', margin: '0 0 16px 0', lineHeight: 1.5 }}>
+                      Enter your registered email address stored in the database. If it matches an existing account (Student or Trainer), you will be able to restore and save a new password.
+                    </p>
+                    <div className="login-form-group">
+                      <label className="login-form-label">Account Email Address</label>
+                      <div className="login-input-wrapper">
+                        <Mail size={18} className="login-input-icon" />
+                        <input
+                          type="email"
+                          placeholder="e.g. student.a@adaptive.edu or trainer@adaptive.edu"
+                          value={resetEmail}
+                          onChange={(e) => setResetEmail(e.target.value)}
+                          required
+                          className="login-input-field"
+                          autoFocus
+                        />
+                      </div>
+                    </div>
+
+                    <button
+                      type="submit"
+                      disabled={resetLoading}
+                      className="login-submit-btn"
+                      style={{ marginTop: '10px', width: '100%' }}
+                    >
+                      <span>{resetLoading ? 'Checking Database...' : 'Find & Verify Email'}</span>
+                      {!resetLoading && <ArrowRight size={18} />}
+                    </button>
+                  </form>
+                )}
+
+                {/* Step 2: Enter New Password */}
+                {resetStep === 2 && (
+                  <form onSubmit={handleResetPassword}>
+                    <div className="forgot-verified-badge" style={{ marginBottom: '14px' }}>
+                      <CheckCircle2 size={20} color="#059669" />
+                      <div>
+                        <div style={{ fontWeight: 700, color: '#166534' }}>
+                          Account Found: {resetVerifiedUser?.name}
+                          <span className={`forgot-role-tag ${resetVerifiedUser?.role === 'TRAINER' ? 'trainer' : 'student'}`}>
+                            {resetVerifiedUser?.role}
+                          </span>
+                        </div>
+                        <div style={{ fontSize: '12px', color: '#15803d' }}>{resetVerifiedUser?.email}</div>
+                      </div>
+                    </div>
+
+                    <p style={{ fontSize: '13px', color: '#64748b', margin: '0 0 14px 0' }}>
+                      Enter and confirm your new password below. It will be immediately updated in the database for future logins.
+                    </p>
+
+                    <div className="login-form-group">
+                      <label className="login-form-label">New Password</label>
+                      <div className="login-input-wrapper">
+                        <Lock size={18} className="login-input-icon" />
+                        <input
+                          type={resetShowNewPassword ? 'text' : 'password'}
+                          placeholder="At least 6 characters"
+                          value={resetNewPassword}
+                          onChange={(e) => setResetNewPassword(e.target.value)}
+                          required
+                          className="login-input-field"
+                          autoFocus
+                        />
+                        <button
+                          type="button"
+                          className="login-password-toggle"
+                          onClick={() => setResetShowNewPassword(!resetShowNewPassword)}
+                          tabIndex="-1"
+                        >
+                          {resetShowNewPassword ? <EyeOff size={18} /> : <Eye size={18} />}
+                        </button>
+                      </div>
+                    </div>
+
+                    <div className="login-form-group">
+                      <label className="login-form-label">Confirm New Password</label>
+                      <div className="login-input-wrapper">
+                        <Lock size={18} className="login-input-icon" />
+                        <input
+                          type={resetShowConfirmPassword ? 'text' : 'password'}
+                          placeholder="Re-enter new password"
+                          value={resetConfirmPassword}
+                          onChange={(e) => setResetConfirmPassword(e.target.value)}
+                          required
+                          className="login-input-field"
+                        />
+                        <button
+                          type="button"
+                          className="login-password-toggle"
+                          onClick={() => setResetShowConfirmPassword(!resetShowConfirmPassword)}
+                          tabIndex="-1"
+                        >
+                          {resetShowConfirmPassword ? <EyeOff size={18} /> : <Eye size={18} />}
+                        </button>
+                      </div>
+                    </div>
+
+                    <button
+                      type="submit"
+                      disabled={resetLoading}
+                      className="login-submit-btn"
+                      style={{ marginTop: '10px', width: '100%' }}
+                    >
+                      <span>{resetLoading ? 'Saving in Database...' : 'Save New Password'}</span>
+                      {!resetLoading && <CheckCircle2 size={18} />}
+                    </button>
+
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setResetStep(1);
+                        setResetError('');
+                      }}
+                      style={{
+                        marginTop: '12px',
+                        background: 'none',
+                        border: 'none',
+                        color: '#64748b',
+                        fontSize: '13px',
+                        cursor: 'pointer',
+                        width: '100%',
+                        textAlign: 'center'
+                      }}
+                    >
+                      ← Use a different email address
+                    </button>
+                  </form>
+                )}
+
+                {/* Step 3: Success Confirmation */}
+                {resetStep === 3 && (
+                  <div style={{ textAlign: 'center', padding: '12px 0 6px 0' }}>
+                    <div style={{
+                      width: '56px',
+                      height: '56px',
+                      borderRadius: '50%',
+                      background: '#ecfdf5',
+                      color: '#059669',
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      margin: '0 auto 16px auto',
+                      border: '2px solid #a7f3d0'
+                    }}>
+                      <CheckCircle2 size={32} />
+                    </div>
+                    <h4 style={{ margin: '0 0 8px 0', fontSize: '18px', fontWeight: 800, color: '#0f172a' }}>
+                      Password Updated Successfully!
+                    </h4>
+                    <p style={{ fontSize: '13.5px', color: '#475569', margin: '0 0 20px 0', lineHeight: 1.5 }}>
+                      The new password for <strong>{resetVerifiedUser?.email}</strong> is now saved in the database.
+                      Click below to return to the sign-in screen and log in with your new password.
+                    </p>
+                    <button
+                      type="button"
+                      onClick={handleApplyNewPasswordAndLogin}
+                      className="login-submit-btn"
+                      style={{ width: '100%' }}
+                    >
+                      <span>Sign In with New Password</span>
+                      <ArrowRight size={18} />
+                    </button>
+                  </div>
+                )}
               </div>
             )}
           </div>

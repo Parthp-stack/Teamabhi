@@ -30,3 +30,26 @@ class Token(BaseModel):
 class TokenData(BaseModel):
     user_id: Optional[int] = None
     role: Optional[str] = None
+
+class VerifyEmailRequest(BaseModel):
+    email: str
+    role: Optional[str] = None
+
+class VerifyEmailResponse(BaseModel):
+    exists: bool
+    email: str
+    name: str
+    role: str
+    message: Optional[str] = None
+
+class ResetPasswordRequest(BaseModel):
+    email: str
+    new_password: str
+    role: Optional[str] = None
+
+class ResetPasswordResponse(BaseModel):
+    success: bool
+    message: str
+    email: str
+    role: str
+

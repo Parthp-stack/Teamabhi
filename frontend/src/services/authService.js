@@ -38,5 +38,15 @@ export const authService = {
     const response = await api.get('/auth/me');
     localStorage.setItem('adaptive_user', JSON.stringify(response.data));
     return response.data;
+  },
+
+  async verifyResetEmail(email, role) {
+    const response = await api.post('/auth/verify-reset-email', { email, role });
+    return response.data;
+  },
+
+  async resetPassword(email, new_password, role) {
+    const response = await api.post('/auth/reset-password', { email, new_password, role });
+    return response.data;
   }
 };
