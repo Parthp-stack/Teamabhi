@@ -2,6 +2,7 @@ import React from 'react';
 import { useNavigate } from 'react-router-dom';
 import { authService } from '../services/authService';
 import { LogOut, User, Sparkles } from 'lucide-react';
+import AdaptiveLogo from './AdaptiveLogo';
 
 export default function Navbar() {
   const navigate = useNavigate();
@@ -37,40 +38,12 @@ export default function Navbar() {
       }}
     >
       {/* Brand */}
-      <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
-        <div
-          style={{
-            width: '36px',
-            height: '36px',
-            borderRadius: '10px',
-            backgroundColor: '#4f46e5',
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'center',
-            color: '#ffffff',
-            fontWeight: 800,
-            fontSize: '18px',
-          }}
-        >
-          A
-        </div>
+      <div style={{ display: 'flex', alignItems: 'center', gap: '12px', cursor: 'pointer' }} onClick={() => navigate(user?.role === 'TRAINER' ? '/trainer/dashboard' : '/student/dashboard')}>
+        <AdaptiveLogo size={36} />
         <div>
           <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-            <span style={{ fontWeight: 800, fontSize: '18px', color: '#0f172a', letterSpacing: '-0.02em' }}>
+            <span style={{ fontWeight: 800, fontSize: '19px', color: '#0f172a', letterSpacing: '-0.02em' }}>
               Adapt<span style={{ color: '#4f46e5' }}>IQ</span>
-            </span>
-            <span
-              style={{
-                fontSize: '10px',
-                fontWeight: 700,
-                backgroundColor: '#e0e7ff',
-                color: '#4338ca',
-                padding: '2px 8px',
-                borderRadius: '12px',
-                textTransform: 'uppercase',
-              }}
-            >
-              Phase 3 · Integrity & Tracking
             </span>
           </div>
         </div>

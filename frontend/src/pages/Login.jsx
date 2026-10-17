@@ -21,71 +21,10 @@ import {
   Info
 } from 'lucide-react';
 import './Login.css';
+import AdaptiveLogo from '../components/AdaptiveLogo';
 
 // Assets
 import studentWorkspaceImg from '../assets/student-workspace.png';
-import cardLogoImg from '../assets/logo-icon-card.png';
-
-// Scalable Vector Logo Component matching the exact emblem from design
-function AdaptiveLogo({ size = 42, light = false }) {
-  return (
-    <svg
-      width={size}
-      height={size}
-      viewBox="0 0 100 100"
-      fill="none"
-      xmlns="http://www.w3.org/2000/svg"
-      style={{ filter: light ? 'drop-shadow(0 0 10px rgba(167, 139, 250, 0.6))' : 'none' }}
-    >
-      <defs>
-        <linearGradient id="logoGrad" x1="0%" y1="0%" x2="100%" y2="100%">
-          <stop offset="0%" stopColor={light ? '#c084fc' : '#6366f1'} />
-          <stop offset="100%" stopColor={light ? '#818cf8' : '#4f46e5'} />
-        </linearGradient>
-        <linearGradient id="glowGrad" x1="0%" y1="0%" x2="100%" y2="100%">
-          <stop offset="0%" stopColor="#a855f7" />
-          <stop offset="100%" stopColor="#3b82f6" />
-        </linearGradient>
-      </defs>
-      {/* Emerging Dot / Head */}
-      <circle cx="50" cy="18" r="8" fill={light ? '#ffffff' : '#4f46e5'} />
-      {/* Sprouting Wings / Leaves */}
-      <path
-        d="M50 48 C44 32, 28 26, 30 20 C36 24, 46 32, 50 48 Z"
-        fill={light ? '#e9d5ff' : '#6366f1'}
-      />
-      <path
-        d="M50 48 C56 32, 72 26, 70 20 C64 24, 54 32, 50 48 Z"
-        fill={light ? '#c084fc' : '#4f46e5'}
-      />
-      {/* Book Outer Pages */}
-      <path
-        d="M14 42 L14 74 C26 78, 38 86, 50 92 C62 86, 74 78, 86 74 L86 42 C74 46, 62 52, 50 56 C38 52, 26 46, 14 42 Z"
-        stroke={light ? '#c084fc' : '#4f46e5'}
-        strokeWidth="6"
-        strokeLinejoin="round"
-        fill="none"
-      />
-      {/* Inner Open Book Flaps */}
-      <path
-        d="M26 45 C34 49, 42 53, 50 55 L50 86 C42 82, 34 76, 26 72 Z"
-        fill={light ? 'rgba(192, 132, 252, 0.2)' : 'none'}
-        stroke={light ? '#a855f7' : '#6366f1'}
-        strokeWidth="5"
-        strokeLinejoin="round"
-      />
-      <path
-        d="M74 45 C66 49, 58 53, 50 55 L50 86 C58 82, 66 76, 74 72 Z"
-        fill={light ? 'rgba(99, 102, 241, 0.2)' : 'none'}
-        stroke={light ? '#818cf8' : '#4f46e5'}
-        strokeWidth="5"
-        strokeLinejoin="round"
-      />
-      {/* Center Spine */}
-      <line x1="50" y1="52" x2="50" y2="88" stroke={light ? '#ffffff' : '#312e81'} strokeWidth="5" strokeLinecap="round" />
-    </svg>
-  );
-}
 
 export default function Login() {
   const navigate = useNavigate();
@@ -145,24 +84,22 @@ export default function Login() {
     setResetError('');
     try {
       const data = await authService.verifyResetEmail(cleanInput, activeRole);
-      setResetVerifiedUser(data);
-      setResetStep(2);
-    } catch (err) {
-      // If the backend returned 404 with standard FastAPI "Not Found" message,
-      // it means the endpoint route /verify-reset-email is not deployed on this server host yet.
-      // Do not block the user with a raw "Not Found" error!
-      if (err.response?.status === 404 && (err.response?.data?.detail === 'Not Found' || !err.response?.data?.detail)) {
-        setResetVerifiedUser({
-          email: cleanInput.includes('@') ? cleanInput : `${cleanInput}@adaptive.edu`,
-          name: activeRole === 'TRAINER' ? 'Instructor Account' : 'Student Account',
-          role: activeRole
-        });
+      if (data && data.exists) {
+        setResetVerifiedUser(data);
         setResetStep(2);
+      } else {
+        setResetError('No account found with this email in the database.');
+      }
+    } catch (err) {
+      const msg = err.response?.data?.detail;
+      if (msg) {
+        setResetError(msg);
       } else if (!err.response) {
         setResetError('Cannot connect to backend server. Ensure backend is running.');
       } else {
-        setResetError(err.response?.data?.detail || 'No account matching this email was found in the database.');
+        setResetError(`No account registered with "${cleanInput}" was found in the database. Please check your email or create an account.`);
       }
+      // Stays on Step 1: NEVER advance to Step 2 if account is not found in database!
     } finally {
       setResetLoading(false);
     }
@@ -185,32 +122,34 @@ export default function Login() {
     const targetEmail = resetVerifiedUser?.email || resetEmail.trim();
     try {
       const data = await authService.resetPassword(targetEmail, resetNewPassword, resetVerifiedUser?.role);
-      setResetSuccess(data.message || 'Password successfully updated!');
-      setResetStep(3);
-    } catch (err) {
-      if (err.response?.status === 404 && (err.response?.data?.detail === 'Not Found' || !err.response?.data?.detail)) {
-        // Fallback if backend route is not available on older host deployment
-        setResetSuccess('Password updated for this session! You can now log in.');
+      if (data && data.success) {
+        setResetSuccess(data.message || 'Password successfully updated in database!');
         setResetStep(3);
-      } else if (!err.response) {
+      } else {
+        setResetError(data?.message || 'Failed to update password in database.');
+      }
+    } catch (err) {
+      if (!err.response) {
         setResetError('Cannot connect to backend server. Ensure backend is running.');
       } else {
-        setResetError(err.response?.data?.detail || 'Failed to update password. Please try again.');
+        setResetError(err.response?.data?.detail || 'Failed to update password in database. Please try again.');
       }
+      // Stays on Step 2: NEVER advance to Step 3 if update failed!
     } finally {
       setResetLoading(false);
     }
   };
 
   const handleApplyNewPasswordAndLogin = () => {
-    setEmail(resetEmail.trim());
+    const finalEmail = resetVerifiedUser?.email || resetEmail.trim();
+    setEmail(finalEmail);
     setPassword(resetNewPassword);
     if (resetVerifiedUser?.role) {
       setActiveRole(resetVerifiedUser.role);
     }
     setIsRegistering(false);
     setError('');
-    setSuccessMsg('Password updated successfully! Click "Sign In" to continue.');
+    setSuccessMsg('Password successfully updated in database! Click "Sign In" below to log in.');
     setActiveModal(null);
   };
 
@@ -389,11 +328,7 @@ export default function Login() {
             {/* Card Header & Logo */}
             <div className="login-card-header">
               <div className="login-card-brand-row">
-                {cardLogoImg ? (
-                  <img src={cardLogoImg} alt="AdaptIQ Logo" />
-                ) : (
-                  <AdaptiveLogo size={42} light={false} />
-                )}
+                <AdaptiveLogo size={42} light={false} />
                 <div>
                   <div className="login-card-brand-title">
                     Adapt<span>IQ</span>
