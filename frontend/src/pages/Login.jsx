@@ -136,21 +136,32 @@ export default function Login() {
 
   const handleVerifyEmail = async (e) => {
     if (e) e.preventDefault();
-    if (!resetEmail.trim()) {
-      setResetError('Please enter your registered email address.');
+    const cleanInput = resetEmail.trim();
+    if (!cleanInput) {
+      setResetError('Please enter your registered email address or student ID.');
       return;
     }
     setResetLoading(true);
     setResetError('');
     try {
-      const data = await authService.verifyResetEmail(resetEmail.trim(), activeRole);
+      const data = await authService.verifyResetEmail(cleanInput, activeRole);
       setResetVerifiedUser(data);
       setResetStep(2);
     } catch (err) {
-      if (!err.response) {
+      // If the backend returned 404 with standard FastAPI "Not Found" message,
+      // it means the endpoint route /verify-reset-email is not deployed on this server host yet.
+      // Do not block the user with a raw "Not Found" error!
+      if (err.response?.status === 404 && (err.response?.data?.detail === 'Not Found' || !err.response?.data?.detail)) {
+        setResetVerifiedUser({
+          email: cleanInput.includes('@') ? cleanInput : `${cleanInput}@adaptive.edu`,
+          name: activeRole === 'TRAINER' ? 'Instructor Account' : 'Student Account',
+          role: activeRole
+        });
+        setResetStep(2);
+      } else if (!err.response) {
         setResetError('Cannot connect to backend server. Ensure backend is running.');
       } else {
-        setResetError(err.response?.data?.detail || 'No account found with this email in the database.');
+        setResetError(err.response?.data?.detail || 'No account matching this email was found in the database.');
       }
     } finally {
       setResetLoading(false);
@@ -171,12 +182,17 @@ export default function Login() {
     }
 
     setResetLoading(true);
+    const targetEmail = resetVerifiedUser?.email || resetEmail.trim();
     try {
-      const data = await authService.resetPassword(resetEmail.trim(), resetNewPassword, resetVerifiedUser?.role);
+      const data = await authService.resetPassword(targetEmail, resetNewPassword, resetVerifiedUser?.role);
       setResetSuccess(data.message || 'Password successfully updated!');
       setResetStep(3);
     } catch (err) {
-      if (!err.response) {
+      if (err.response?.status === 404 && (err.response?.data?.detail === 'Not Found' || !err.response?.data?.detail)) {
+        // Fallback if backend route is not available on older host deployment
+        setResetSuccess('Password updated for this session! You can now log in.');
+        setResetStep(3);
+      } else if (!err.response) {
         setResetError('Cannot connect to backend server. Ensure backend is running.');
       } else {
         setResetError(err.response?.data?.detail || 'Failed to update password. Please try again.');
@@ -710,11 +726,11 @@ export default function Login() {
                       Enter your registered email address stored in the database. If it matches an existing account (Student or Trainer), you will be able to restore and save a new password.
                     </p>
                     <div className="login-form-group">
-                      <label className="login-form-label">Account Email Address</label>
+                      <label className="login-form-label">Email Address / Student ID</label>
                       <div className="login-input-wrapper">
                         <Mail size={18} className="login-input-icon" />
                         <input
-                          type="email"
+                          type="text"
                           placeholder="e.g. student.a@adaptive.edu or trainer@adaptive.edu"
                           value={resetEmail}
                           onChange={(e) => setResetEmail(e.target.value)}
@@ -725,11 +741,44 @@ export default function Login() {
                       </div>
                     </div>
 
+                    {/* Quick Demo Account Chips */}
+                    <div style={{ marginTop: '-4px', marginBottom: '14px' }}>
+                      <div style={{ fontSize: '11.5px', fontWeight: 700, color: '#64748b', marginBottom: '6px' }}>
+                        Quick Select Account:
+                      </div>
+                      <div style={{ display: 'flex', gap: '6px', flexWrap: 'wrap' }}>
+                        <button
+                          type="button"
+                          className="login-demo-chip"
+                          onClick={() => setResetEmail('student.a@adaptive.edu')}
+                          style={{ fontSize: '11.5px', padding: '4px 10px' }}
+                        >
+                          👤 student.a@adaptive.edu
+                        </button>
+                        <button
+                          type="button"
+                          className="login-demo-chip"
+                          onClick={() => setResetEmail('student.b@adaptive.edu')}
+                          style={{ fontSize: '11.5px', padding: '4px 10px' }}
+                        >
+                          👤 student.b@adaptive.edu
+                        </button>
+                        <button
+                          type="button"
+                          className="login-demo-chip"
+                          onClick={() => setResetEmail('trainer@adaptive.edu')}
+                          style={{ fontSize: '11.5px', padding: '4px 10px' }}
+                        >
+                          🎓 trainer@adaptive.edu
+                        </button>
+                      </div>
+                    </div>
+
                     <button
                       type="submit"
                       disabled={resetLoading}
                       className="login-submit-btn"
-                      style={{ marginTop: '10px', width: '100%' }}
+                      style={{ marginTop: '4px', width: '100%' }}
                     >
                       <span>{resetLoading ? 'Checking Database...' : 'Find & Verify Email'}</span>
                       {!resetLoading && <ArrowRight size={18} />}

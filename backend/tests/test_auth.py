@@ -28,12 +28,30 @@ def test_verify_reset_email_endpoints():
     assert data_student["exists"] is True
     assert data_student["role"] == "STUDENT"
 
+    # Test flexible username / prefix lookup without domain
+    res_prefix = client.post("/api/auth/verify-reset-email", json={"email": "student.a"})
+    assert res_prefix.status_code == 200
+    assert res_prefix.json()["email"] == "student.a@adaptive.edu"
+
+    # Test whitespace and uppercase handling
+    res_case = client.post("/api/auth/verify-reset-email", json={"email": "  STUDENT.A@ADAPTIVE.EDU  "})
+    assert res_case.status_code == 200
+    assert res_case.json()["exists"] is True
+
     # Test trainer email check
     res_trainer = client.post("/api/auth/verify-reset-email", json={"email": "trainer@adaptive.edu"})
     assert res_trainer.status_code == 200
     data_trainer = res_trainer.json()
     assert data_trainer["exists"] is True
     assert data_trainer["role"] == "TRAINER"
+
+    # Test trainer short handle
+    res_trainer_short = client.post("/api/auth/verify-reset-email", json={"email": "trainer"})
+    assert res_trainer_short.status_code == 200
+
+    # Test direct /auth/ route without /api prefix
+    res_direct = client.post("/auth/verify-reset-email", json={"email": "student.a@adaptive.edu"})
+    assert res_direct.status_code == 200
 
     # Test nonexistent email check
     res_fake = client.post("/api/auth/verify-reset-email", json={"email": "nonexistent_999@domain.com"})

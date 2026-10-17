@@ -98,6 +98,7 @@ def health_check():
 
 # Register API routers
 app.include_router(auth_router, prefix="/api")
+app.include_router(auth_router)  # Fallback for direct /auth requests
 app.include_router(courses_router, prefix="/api")
 app.include_router(concepts_router, prefix="/api")
 app.include_router(mastery_router, prefix="/api")
