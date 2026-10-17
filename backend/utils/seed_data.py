@@ -788,11 +788,13 @@ def seed_phase4_assessments_and_submissions(db: Session):
         # Attach viva questions and evaluations for sub_a1
         vq1 = ExplanationQuestion(
             submission_id=sub_a1.id,
+            question_text="How does your implementation enforce encapsulation of the account balance?",
             question="How does your implementation enforce encapsulation of the account balance?",
             expected_concept="Encapsulation and private state mutation"
         )
         vq2 = ExplanationQuestion(
             submission_id=sub_a1.id,
+            question_text="What happens in memory and state when an invalid withdrawal is attempted?",
             question="What happens in memory and state when an invalid withdrawal is attempted?",
             expected_concept="Exception handling and invariant preservation"
         )
@@ -846,6 +848,7 @@ def seed_phase4_assessments_and_submissions(db: Session):
 
         vq_b1 = ExplanationQuestion(
             submission_id=sub_b1.id,
+            question_text="Why is direct attribute access to balance risky in multi-component systems?",
             question="Why is direct attribute access to balance risky in multi-component systems?",
             expected_concept="Encapsulation"
         )

@@ -3,6 +3,7 @@ import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
 import Navbar from './components/Navbar';
 import Sidebar from './components/Sidebar';
 import Login from './pages/Login';
+import ResetPasswordPage from './pages/ResetPasswordPage';
 import StudentDashboard from './pages/StudentDashboard';
 import ConceptMapPage from './pages/ConceptMapPage';
 import AdaptiveLearningPage from './pages/AdaptiveLearningPage';
@@ -89,6 +90,7 @@ export default function App() {
     <BrowserRouter>
       <Routes>
         <Route path="/login" element={<Login />} />
+        <Route path="/reset-password" element={<ResetPasswordPage />} />
 
         {/* Default route redirect */}
         <Route

@@ -42,9 +42,40 @@ class VerifyEmailResponse(BaseModel):
     role: str
     message: Optional[str] = None
 
-class ResetPasswordRequest(BaseModel):
+class ForgotPasswordRequest(BaseModel):
     email: str
+    role: Optional[str] = None
+
+class ForgotPasswordResponse(BaseModel):
+    success: bool
+    message: str
+    email: str
+    role: Optional[str] = None
+    reset_link: Optional[str] = None
+
+class VerifyResetTokenResponse(BaseModel):
+    valid: bool
+    email: str
+    name: str
+    role: str
+
+class VerifyOTPRequest(BaseModel):
+    email: str
+    otp: str
+    role: Optional[str] = None
+
+class VerifyOTPResponse(BaseModel):
+    success: bool
+    message: str
+    email: str
+    role: Optional[str] = None
+
+class ResetPasswordRequest(BaseModel):
+    token: Optional[str] = None
     new_password: str
+    confirm_password: Optional[str] = None
+    email: Optional[str] = None
+    otp: Optional[str] = None
     role: Optional[str] = None
 
 class ResetPasswordResponse(BaseModel):

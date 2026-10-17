@@ -36,6 +36,15 @@ class Settings(BaseSettings):
     # CORS
     FRONTEND_URL: str = os.getenv("FRONTEND_URL", "http://localhost:5173")
 
+    # Email & OTP Service (Resend & SMTP)
+    RESEND_API_KEY: Optional[str] = os.getenv("RESEND_API_KEY", "")
+    RESEND_FROM_EMAIL: str = os.getenv("RESEND_FROM_EMAIL", "onboarding@resend.dev")
+    SMTP_HOST: Optional[str] = os.getenv("SMTP_HOST", "")
+    SMTP_PORT: int = int(os.getenv("SMTP_PORT", "587"))
+    SMTP_USER: Optional[str] = os.getenv("SMTP_USER", "")
+    SMTP_PASSWORD: Optional[str] = os.getenv("SMTP_PASSWORD", "")
+    SMTP_FROM_EMAIL: Optional[str] = os.getenv("SMTP_FROM_EMAIL", "")
+
     model_config = SettingsConfigDict(env_file=".env", extra="ignore")
 
 settings = Settings()

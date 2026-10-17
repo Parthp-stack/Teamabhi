@@ -447,8 +447,18 @@ def seed_data_structures_curriculum(db: Session):
         db.refresh(sub_sample)
 
         # Add viva questions
-        vq1 = ExplanationQuestion(submission_id=sub_sample.id, question="Why did you use left + (right - left) // 2 instead of (left + right) // 2?", expected_concept="Integer Overflow Prevention")
-        vq2 = ExplanationQuestion(submission_id=sub_sample.id, question="What is the space complexity of your iterative binary search implementation?", expected_concept="Auxiliary Space Analysis")
+        vq1 = ExplanationQuestion(
+            submission_id=sub_sample.id,
+            question_text="Why did you use left + (right - left) // 2 instead of (left + right) // 2?",
+            question="Why did you use left + (right - left) // 2 instead of (left + right) // 2?",
+            expected_concept="Integer Overflow Prevention"
+        )
+        vq2 = ExplanationQuestion(
+            submission_id=sub_sample.id,
+            question_text="What is the space complexity of your iterative binary search implementation?",
+            question="What is the space complexity of your iterative binary search implementation?",
+            expected_concept="Auxiliary Space Analysis"
+        )
         db.add_all([vq1, vq2])
         db.commit()
         db.refresh(vq1)

@@ -47,48 +47,44 @@ export default function Login() {
   // Info Modal states for top nav
   const [activeModal, setActiveModal] = useState(null); // 'features' | 'about' | 'contact' | 'forgot' | null
 
-  // Forgot Password flow states
-  const [resetStep, setResetStep] = useState(1); // 1: verify email, 2: enter new password, 3: completed
+  // Forgot Password flow states (Link-based, NO OTP)
   const [resetEmail, setResetEmail] = useState('');
-  const [resetVerifiedUser, setResetVerifiedUser] = useState(null);
-  const [resetNewPassword, setResetNewPassword] = useState('');
-  const [resetConfirmPassword, setResetConfirmPassword] = useState('');
-  const [resetShowNewPassword, setResetShowNewPassword] = useState(false);
-  const [resetShowConfirmPassword, setResetShowConfirmPassword] = useState(false);
   const [resetLoading, setResetLoading] = useState(false);
   const [resetError, setResetError] = useState('');
   const [resetSuccess, setResetSuccess] = useState('');
+  const [resetLinkSent, setResetLinkSent] = useState(false);
+  const [resetDevLink, setResetDevLink] = useState(null);
 
   const handleOpenForgotModal = () => {
     setResetEmail(email || '');
-    setResetStep(1);
-    setResetVerifiedUser(null);
-    setResetNewPassword('');
-    setResetConfirmPassword('');
-    setResetShowNewPassword(false);
-    setResetShowConfirmPassword(false);
     setResetLoading(false);
     setResetError('');
     setResetSuccess('');
+    setResetLinkSent(false);
+    setResetDevLink(null);
     setActiveModal('forgot');
   };
 
-  const handleVerifyEmail = async (e) => {
+  const handleSendResetLink = async (e) => {
     if (e) e.preventDefault();
     const cleanInput = resetEmail.trim();
     if (!cleanInput) {
-      setResetError('Please enter your registered email address or student ID.');
+      setResetError('Please enter your registered email address.');
       return;
     }
     setResetLoading(true);
     setResetError('');
+    setResetSuccess('');
     try {
-      const data = await authService.verifyResetEmail(cleanInput, activeRole);
-      if (data && data.exists) {
-        setResetVerifiedUser(data);
-        setResetStep(2);
+      const data = await authService.forgotPassword(cleanInput, activeRole);
+      if (data && data.success) {
+        setResetLinkSent(true);
+        setResetSuccess(data.message || 'Password reset link sent to your email.');
+        if (data.reset_link) {
+          setResetDevLink(data.reset_link);
+        }
       } else {
-        setResetError('No account found with this email in the database.');
+        setResetError('Email not found');
       }
     } catch (err) {
       const msg = err.response?.data?.detail;
@@ -97,78 +93,13 @@ export default function Login() {
       } else if (!err.response) {
         setResetError('Cannot connect to backend server. Ensure backend is running.');
       } else {
-        setResetError(`No account registered with "${cleanInput}" was found in the database. Please check your email or create an account.`);
+        setResetError('Email not found');
       }
-      // Stays on Step 1: NEVER advance to Step 2 if account is not found in database!
     } finally {
       setResetLoading(false);
     }
   };
 
-  const handleResetPassword = async (e) => {
-    if (e) e.preventDefault();
-    setResetError('');
-
-    if (resetNewPassword.length < 6) {
-      setResetError('New password must be at least 6 characters long.');
-      return;
-    }
-    if (resetNewPassword !== resetConfirmPassword) {
-      setResetError('Passwords do not match. Please re-enter.');
-      return;
-    }
-
-    setResetLoading(true);
-    const targetEmail = resetVerifiedUser?.email || resetEmail.trim();
-    try {
-      const data = await authService.resetPassword(targetEmail, resetNewPassword, resetVerifiedUser?.role);
-      if (data && data.success) {
-        setResetSuccess(data.message || 'Password successfully updated in database!');
-        setResetStep(3);
-      } else {
-        setResetError(data?.message || 'Failed to update password in database.');
-      }
-    } catch (err) {
-      if (!err.response) {
-        setResetError('Cannot connect to backend server. Ensure backend is running.');
-      } else {
-        setResetError(err.response?.data?.detail || 'Failed to update password in database. Please try again.');
-      }
-      // Stays on Step 2: NEVER advance to Step 3 if update failed!
-    } finally {
-      setResetLoading(false);
-    }
-  };
-
-  const handleApplyNewPasswordAndLogin = async () => {
-    const finalEmail = resetVerifiedUser?.email || resetEmail.trim();
-    const finalPass = resetNewPassword;
-    const finalRole = resetVerifiedUser?.role || activeRole;
-
-    setEmail(finalEmail);
-    setPassword(finalPass);
-    if (finalRole) {
-      setActiveRole(finalRole);
-    }
-    setIsRegistering(false);
-    setActiveModal(null);
-    setLoading(true);
-    setError('');
-    setSuccessMsg('Signing in with your new password...');
-
-    try {
-      const data = await authService.login(finalEmail, finalPass);
-      if (data.user.role === 'TRAINER') {
-        navigate('/trainer/dashboard');
-      } else {
-        navigate('/student/dashboard');
-      }
-    } catch (err) {
-      setError(err.response?.data?.detail || 'Sign in failed with new password. Please try again.');
-    } finally {
-      setLoading(false);
-    }
-  };
 
 
   const handleAuth = async (e) => {
@@ -646,44 +577,26 @@ export default function Login() {
 
             {activeModal === 'forgot' && (
               <div className="forgot-modal-content">
-                {/* 3-Step Progress Header */}
-                <div className="forgot-steps-bar">
-                  <div className={`forgot-step-chip ${resetStep >= 1 ? 'active' : ''}`}>
-                    <span className="forgot-step-num">1</span>
-                    <span>Verify Email</span>
-                  </div>
-                  <div className="forgot-step-line" />
-                  <div className={`forgot-step-chip ${resetStep >= 2 ? 'active' : ''}`}>
-                    <span className="forgot-step-num">2</span>
-                    <span>New Password</span>
-                  </div>
-                  <div className="forgot-step-line" />
-                  <div className={`forgot-step-chip ${resetStep >= 3 ? 'active' : ''}`}>
-                    <span className="forgot-step-num">3</span>
-                    <span>Done</span>
-                  </div>
-                </div>
-
-                {resetError && (
-                  <div className="login-alert login-alert-error" style={{ marginBottom: '14px' }}>
-                    <AlertCircle size={16} />
-                    <span>{resetError}</span>
-                  </div>
-                )}
-
-                {/* Step 1: Search and Verify Registered Email */}
-                {resetStep === 1 && (
-                  <form onSubmit={handleVerifyEmail}>
+                {!resetLinkSent ? (
+                  <form onSubmit={handleSendResetLink}>
                     <p style={{ fontSize: '13.5px', color: '#64748b', margin: '0 0 16px 0', lineHeight: 1.5 }}>
-                      Enter your registered email address stored in the database. If it matches an existing account (Student or Trainer), you will be able to restore and save a new password.
+                      Enter your registered email address for your <strong>{activeRole === 'STUDENT' ? 'Student' : 'Trainer'}</strong> account. We will send you a secure link to reset your password.
                     </p>
+
+                    {resetError && (
+                      <div className="login-alert login-alert-error" style={{ marginBottom: '14px' }}>
+                        <AlertCircle size={16} />
+                        <span>{resetError}</span>
+                      </div>
+                    )}
+
                     <div className="login-form-group">
-                      <label className="login-form-label">Email Address / Student ID</label>
+                      <label className="login-form-label">Email Address</label>
                       <div className="login-input-wrapper">
                         <Mail size={18} className="login-input-icon" />
                         <input
                           type="text"
-                          placeholder="e.g. student.a@adaptive.edu or trainer@adaptive.edu"
+                          placeholder={activeRole === 'STUDENT' ? 'e.g. student.a@adaptive.edu' : 'e.g. trainer@adaptive.edu'}
                           value={resetEmail}
                           onChange={(e) => setResetEmail(e.target.value)}
                           required
@@ -694,7 +607,7 @@ export default function Login() {
                     </div>
 
                     {/* Quick Demo Account Chips */}
-                    <div style={{ marginTop: '-4px', marginBottom: '14px' }}>
+                    <div style={{ marginTop: '-4px', marginBottom: '16px' }}>
                       <div style={{ fontSize: '11.5px', fontWeight: 700, color: '#64748b', marginBottom: '6px' }}>
                         Quick Select Account:
                       </div>
@@ -732,113 +645,11 @@ export default function Login() {
                       className="login-submit-btn"
                       style={{ marginTop: '4px', width: '100%' }}
                     >
-                      <span>{resetLoading ? 'Checking Database...' : 'Find & Verify Email'}</span>
+                      <span>{resetLoading ? 'Sending Reset Link...' : 'Send Reset Link'}</span>
                       {!resetLoading && <ArrowRight size={18} />}
                     </button>
                   </form>
-                )}
-
-                {/* Step 2: Enter New Password */}
-                {resetStep === 2 && (
-                  <form onSubmit={handleResetPassword}>
-                    <div className="forgot-verified-badge" style={{ marginBottom: '14px' }}>
-                      <CheckCircle2 size={20} color="#059669" />
-                      <div>
-                        <div style={{ fontWeight: 700, color: '#166534' }}>
-                          Account Found: {resetVerifiedUser?.name}
-                          <span className={`forgot-role-tag ${resetVerifiedUser?.role === 'TRAINER' ? 'trainer' : 'student'}`}>
-                            {resetVerifiedUser?.role}
-                          </span>
-                        </div>
-                        <div style={{ fontSize: '12px', color: '#15803d' }}>{resetVerifiedUser?.email}</div>
-                      </div>
-                    </div>
-
-                    <p style={{ fontSize: '13px', color: '#64748b', margin: '0 0 14px 0' }}>
-                      Enter and confirm your new password below. It will be immediately updated in the database for future logins.
-                    </p>
-
-                    <div className="login-form-group">
-                      <label className="login-form-label">New Password</label>
-                      <div className="login-input-wrapper">
-                        <Lock size={18} className="login-input-icon" />
-                        <input
-                          type={resetShowNewPassword ? 'text' : 'password'}
-                          placeholder="At least 6 characters"
-                          value={resetNewPassword}
-                          onChange={(e) => setResetNewPassword(e.target.value)}
-                          required
-                          className="login-input-field"
-                          autoFocus
-                        />
-                        <button
-                          type="button"
-                          className="login-password-toggle"
-                          onClick={() => setResetShowNewPassword(!resetShowNewPassword)}
-                          tabIndex="-1"
-                        >
-                          {resetShowNewPassword ? <EyeOff size={18} /> : <Eye size={18} />}
-                        </button>
-                      </div>
-                    </div>
-
-                    <div className="login-form-group">
-                      <label className="login-form-label">Confirm New Password</label>
-                      <div className="login-input-wrapper">
-                        <Lock size={18} className="login-input-icon" />
-                        <input
-                          type={resetShowConfirmPassword ? 'text' : 'password'}
-                          placeholder="Re-enter new password"
-                          value={resetConfirmPassword}
-                          onChange={(e) => setResetConfirmPassword(e.target.value)}
-                          required
-                          className="login-input-field"
-                        />
-                        <button
-                          type="button"
-                          className="login-password-toggle"
-                          onClick={() => setResetShowConfirmPassword(!resetShowConfirmPassword)}
-                          tabIndex="-1"
-                        >
-                          {resetShowConfirmPassword ? <EyeOff size={18} /> : <Eye size={18} />}
-                        </button>
-                      </div>
-                    </div>
-
-                    <button
-                      type="submit"
-                      disabled={resetLoading}
-                      className="login-submit-btn"
-                      style={{ marginTop: '10px', width: '100%' }}
-                    >
-                      <span>{resetLoading ? 'Saving in Database...' : 'Save New Password'}</span>
-                      {!resetLoading && <CheckCircle2 size={18} />}
-                    </button>
-
-                    <button
-                      type="button"
-                      onClick={() => {
-                        setResetStep(1);
-                        setResetError('');
-                      }}
-                      style={{
-                        marginTop: '12px',
-                        background: 'none',
-                        border: 'none',
-                        color: '#64748b',
-                        fontSize: '13px',
-                        cursor: 'pointer',
-                        width: '100%',
-                        textAlign: 'center'
-                      }}
-                    >
-                      ← Use a different email address
-                    </button>
-                  </form>
-                )}
-
-                {/* Step 3: Success Confirmation */}
-                {resetStep === 3 && (
+                ) : (
                   <div style={{ textAlign: 'center', padding: '12px 0 6px 0' }}>
                     <div style={{
                       width: '56px',
@@ -855,20 +666,76 @@ export default function Login() {
                       <CheckCircle2 size={32} />
                     </div>
                     <h4 style={{ margin: '0 0 8px 0', fontSize: '18px', fontWeight: 800, color: '#0f172a' }}>
-                      Password Updated Successfully!
+                      Reset Link Sent!
                     </h4>
-                    <p style={{ fontSize: '13.5px', color: '#475569', margin: '0 0 20px 0', lineHeight: 1.5 }}>
-                      The new password for <strong>{resetVerifiedUser?.email}</strong> is now saved in the database.
-                      Click below to return to the sign-in screen and log in with your new password.
+                    <p style={{ fontSize: '13.5px', color: '#475569', margin: '0 0 16px 0', lineHeight: 1.5 }}>
+                      We have sent a secure password reset link to <strong>{resetEmail}</strong>.<br />
+                      Please check your inbox and click the link to choose a new password. The link expires in <strong>15 minutes</strong>.
                     </p>
+
+                    {resetDevLink && (
+                      <div style={{
+                        background: '#f8fafc',
+                        border: '1px dashed #cbd5e1',
+                        borderRadius: '8px',
+                        padding: '12px',
+                        marginBottom: '16px',
+                        textAlign: 'left'
+                      }}>
+                        <div style={{ fontSize: '12px', fontWeight: 700, color: '#4f46e5', marginBottom: '6px' }}>
+                          💡 Direct Link (Dev / Testing Mode):
+                        </div>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setActiveModal(null);
+                            const url = new URL(resetDevLink, window.location.origin);
+                            navigate(`${url.pathname}${url.search}`);
+                          }}
+                          style={{
+                            background: '#e0e7ff',
+                            color: '#4338ca',
+                            border: '1px solid #c7d2fe',
+                            borderRadius: '6px',
+                            padding: '6px 12px',
+                            fontSize: '12px',
+                            fontWeight: 700,
+                            cursor: 'pointer',
+                            display: 'inline-flex',
+                            alignItems: 'center',
+                            gap: '4px'
+                          }}
+                        >
+                          Open Reset Password Page <ArrowRight size={14} />
+                        </button>
+                      </div>
+                    )}
+
                     <button
                       type="button"
-                      onClick={handleApplyNewPasswordAndLogin}
+                      onClick={() => setActiveModal(null)}
                       className="login-submit-btn"
-                      style={{ width: '100%' }}
+                      style={{ width: '100%', marginBottom: '10px' }}
                     >
-                      <span>Sign In with New Password</span>
-                      <ArrowRight size={18} />
+                      <span>Close</span>
+                    </button>
+
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setResetLinkSent(false);
+                        setResetError('');
+                      }}
+                      style={{
+                        background: 'none',
+                        border: 'none',
+                        color: '#64748b',
+                        fontSize: '13px',
+                        cursor: 'pointer',
+                        padding: '4px 0'
+                      }}
+                    >
+                      ← Send to a different email address
                     </button>
                   </div>
                 )}
