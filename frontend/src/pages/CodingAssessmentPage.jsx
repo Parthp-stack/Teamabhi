@@ -14,6 +14,9 @@ import {
   AlertTriangle,
   Code2,
   ShieldCheck,
+  ChevronLeft,
+  ChevronRight,
+  RefreshCw,
 } from 'lucide-react';
 
 const DEFAULT_BOILERPLATES = {
@@ -117,7 +120,12 @@ rl.on('close', () => {
 export default function CodingAssessmentPage() {
   const location = useLocation();
   const navigate = useNavigate();
-  const problemIdFromState = location.state?.problemId || 1;
+  const initialProblemId = location.state?.problemId || 1;
+
+  const [selectedProblemId, setSelectedProblemId] = useState(initialProblemId);
+  const [allProblems, setAllProblems] = useState([]);
+  const [loadingProblem, setLoadingProblem] = useState(true);
+  const [problemLoadError, setProblemLoadError] = useState(null);
 
   const [problem, setProblem] = useState(null);
   const [language, setLanguage] = useState('python');
@@ -135,6 +143,21 @@ export default function CodingAssessmentPage() {
   const editorRef = useRef(null);
   const isPastingRef = useRef(false);
   const hasRunOnceRef = useRef(false);
+
+  // Load problem catalog
+  useEffect(() => {
+    async function loadCatalog() {
+      try {
+        const list = await codingService.getProblems();
+        if (list && list.length > 0) {
+          setAllProblems(list);
+        }
+      } catch (e) {
+        console.warn('Could not load problems list:', e);
+      }
+    }
+    loadCatalog();
+  }, []);
 
   const handleLanguageChange = (newLang) => {
     // If current code matches default of previous language or is empty, switch template
@@ -181,21 +204,53 @@ export default function CodingAssessmentPage() {
   // Hook for session recording with progressive warning listener
   const { recordEvent, flushEvents } = useSessionRecorder(sessionId, handleIntegrityWarning);
 
-  // Initialize assessment session and fetch problem
-  useEffect(() => {
-    async function init() {
-      try {
-        const prob = await codingService.getProblem(problemIdFromState);
-        setProblem(prob);
+  // Initialize assessment session and fetch problem whenever selectedProblemId changes
+  const loadProblemAndSession = useCallback(async (pId) => {
+    setLoadingProblem(true);
+    setProblemLoadError(null);
+    try {
+      const prob = await codingService.getProblem(pId);
+      setProblem(prob);
+      hasRunOnceRef.current = false;
+      setRunResult(null);
 
-        const sess = await sessionService.startSession(prob.id);
-        setSessionId(sess.id);
-      } catch (err) {
-        console.error('Failed to initialize session/problem:', err);
-      }
+      // Start assessment session
+      const sess = await sessionService.startSession(prob.id);
+      setSessionId(sess.id);
+    } catch (err) {
+      console.error('Failed to initialize session/problem:', err);
+      setProblemLoadError('Failed to load coding problem. Please click Retry.');
+    } finally {
+      setLoadingProblem(false);
     }
-    init();
-  }, [problemIdFromState]);
+  }, []);
+
+  const handleSwitchProblem = useCallback(async (targetId) => {
+    if (!targetId || targetId === selectedProblemId) return;
+    try {
+      await flushEvents();
+      if (sessionId) {
+        await sessionService.endSession(sessionId);
+      }
+    } catch (e) {
+      console.warn('Closing previous session:', e);
+    }
+    setSelectedProblemId(targetId);
+  }, [selectedProblemId, sessionId, flushEvents]);
+
+  // Sync selectedProblemId if router location state or query parameter changes
+  useEffect(() => {
+    const sp = new URLSearchParams(location.search);
+    const qId = sp.get('problemId');
+    const target = location.state?.problemId || (qId ? parseInt(qId, 10) : null);
+    if (target && target !== selectedProblemId) {
+      handleSwitchProblem(target);
+    }
+  }, [location.state, location.search, selectedProblemId, handleSwitchProblem]);
+
+  useEffect(() => {
+    loadProblemAndSession(selectedProblemId);
+  }, [selectedProblemId, loadProblemAndSession]);
 
   // Monaco Editor onMount handler
   const handleEditorMount = (editor, monaco) => {
@@ -337,11 +392,20 @@ export default function CodingAssessmentPage() {
 
     try {
       const res = await codingService.submitCode(problem.id, language, code, sessionId);
-      if (sessionId) {
-        await sessionService.endSession(sessionId);
-      }
+
+      // Find next problem if available
+      const currentIdx = allProblems.findIndex((p) => p.id === problem.id);
+      const nextProblem = currentIdx >= 0 && currentIdx < allProblems.length - 1 ? allProblems[currentIdx + 1] : null;
+
       // Navigate to Explain Your Code
-      navigate(`/student/explain/${res.submission_id}`);
+      navigate(`/student/explain/${res.submission_id}`, {
+        state: {
+          problemId: problem.id,
+          problemTitle: problem.title,
+          nextProblemId: nextProblem ? nextProblem.id : null,
+          nextProblemTitle: nextProblem ? nextProblem.title : null,
+        },
+      });
     } catch (err) {
       console.error('Submission failed:', err);
       alert('Submission encountered an error. Please try again.');
@@ -402,6 +466,118 @@ export default function CodingAssessmentPage() {
             overflow: 'hidden',
           }}
         >
+          {/* Question / Problem Navigation Toolbar */}
+          <div
+            style={{
+              padding: '10px 16px',
+              backgroundColor: '#f8fafc',
+              borderBottom: '1px solid #e2e8f0',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'space-between',
+              gap: '8px',
+            }}
+          >
+            <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+              <button
+                type="button"
+                onClick={() => {
+                  const idx = allProblems.findIndex((p) => p.id === selectedProblemId);
+                  if (idx > 0) handleSwitchProblem(allProblems[idx - 1].id);
+                }}
+                disabled={allProblems.findIndex((p) => p.id === selectedProblemId) <= 0}
+                style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '4px',
+                  padding: '5px 10px',
+                  borderRadius: '6px',
+                  border: '1px solid #cbd5e1',
+                  backgroundColor: '#ffffff',
+                  fontSize: '12px',
+                  fontWeight: 600,
+                  cursor: allProblems.findIndex((p) => p.id === selectedProblemId) <= 0 ? 'not-allowed' : 'pointer',
+                  opacity: allProblems.findIndex((p) => p.id === selectedProblemId) <= 0 ? 0.4 : 1,
+                }}
+              >
+                <ChevronLeft size={14} /> Prev
+              </button>
+
+              <select
+                value={selectedProblemId}
+                onChange={(e) => handleSwitchProblem(Number(e.target.value))}
+                style={{
+                  padding: '5px 8px',
+                  borderRadius: '6px',
+                  border: '1px solid #cbd5e1',
+                  backgroundColor: '#ffffff',
+                  fontSize: '12px',
+                  fontWeight: 700,
+                  color: '#1e293b',
+                  maxWidth: '180px',
+                }}
+              >
+                {allProblems.map((p, i) => (
+                  <option key={p.id} value={p.id}>
+                    Q{i + 1}: {p.title}
+                  </option>
+                ))}
+              </select>
+
+              <button
+                type="button"
+                onClick={() => {
+                  const idx = allProblems.findIndex((p) => p.id === selectedProblemId);
+                  if (idx >= 0 && idx < allProblems.length - 1) handleSwitchProblem(allProblems[idx + 1].id);
+                }}
+                disabled={
+                  allProblems.length === 0 ||
+                  allProblems.findIndex((p) => p.id === selectedProblemId) >= allProblems.length - 1
+                }
+                style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '4px',
+                  padding: '5px 10px',
+                  borderRadius: '6px',
+                  border: '1px solid #cbd5e1',
+                  backgroundColor: '#ffffff',
+                  fontSize: '12px',
+                  fontWeight: 600,
+                  cursor:
+                    allProblems.length === 0 ||
+                    allProblems.findIndex((p) => p.id === selectedProblemId) >= allProblems.length - 1
+                      ? 'not-allowed'
+                      : 'pointer',
+                  opacity:
+                    allProblems.length === 0 ||
+                    allProblems.findIndex((p) => p.id === selectedProblemId) >= allProblems.length - 1
+                      ? 0.4
+                      : 1,
+                }}
+              >
+                Next <ChevronRight size={14} />
+              </button>
+            </div>
+
+            <button
+              type="button"
+              onClick={() => loadProblemAndSession(selectedProblemId)}
+              title="Reload Problem"
+              style={{
+                border: 'none',
+                background: 'transparent',
+                cursor: 'pointer',
+                color: '#64748b',
+                display: 'flex',
+                alignItems: 'center',
+                padding: '4px',
+              }}
+            >
+              <RefreshCw size={14} className={loadingProblem ? 'animate-spin' : ''} />
+            </button>
+          </div>
+
           <div style={{ padding: '20px 24px', borderBottom: '1px solid #e5e7eb', backgroundColor: '#f8fafc' }}>
             <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '6px' }}>
               <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>

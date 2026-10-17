@@ -35,10 +35,10 @@ def get_coding_problems(db: Session = Depends(get_db)):
             id=p.id,
             title=p.title,
             description=p.description,
-            difficulty=p.difficulty,
-            allowed_languages=p.allowed_languages,
-            time_limit=p.time_limit,
-            memory_limit=p.memory_limit,
+            difficulty=p.difficulty or "MEDIUM",
+            allowed_languages=p.allowed_languages or ["python", "cpp", "c", "java", "javascript"],
+            time_limit=float(p.time_limit or 2.0),
+            memory_limit=int(p.memory_limit or 128),
             visible_test_cases=visible,
             problem_statement=p.problem_statement or p.description,
             input_format=p.input_format,
@@ -66,10 +66,10 @@ def get_coding_problem(problem_id: int, db: Session = Depends(get_db)):
         id=p.id,
         title=p.title,
         description=p.description,
-        difficulty=p.difficulty,
-        allowed_languages=p.allowed_languages,
-        time_limit=p.time_limit,
-        memory_limit=p.memory_limit,
+        difficulty=p.difficulty or "MEDIUM",
+        allowed_languages=p.allowed_languages or ["python", "cpp", "c", "java", "javascript"],
+        time_limit=float(p.time_limit or 2.0),
+        memory_limit=int(p.memory_limit or 128),
         visible_test_cases=visible,
         problem_statement=p.problem_statement or p.description,
         input_format=p.input_format,
@@ -217,10 +217,13 @@ async def submit_code(
         language=req.language
     )
 
-    for q_data in viva_questions:
+    for idx, q_data in enumerate(viva_questions, 1):
+        q_text = q_data.get("question") or q_data.get("question_text", "Explain your implementation logic and architectural design.")
         q_obj = ExplanationQuestion(
             submission_id=submission.id,
-            question=q_data["question"],
+            question_index=idx,
+            question_text=q_text,
+            question=q_text,
             expected_concept=q_data.get("expected_concept", "Implementation Logic")
         )
         db.add(q_obj)

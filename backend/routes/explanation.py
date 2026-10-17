@@ -76,21 +76,32 @@ async def submit_explanation_answers(
 
         # Save or update answer record
         ans_record = db.query(ExplanationAnswer).filter(
-            ExplanationAnswer.explanation_question_id == q.id
+            (ExplanationAnswer.explanation_question_id == q.id) | (ExplanationAnswer.question_id == q.id)
         ).first()
+
+        eval_text = eval_result.get("evaluation", "")
+        eval_score = float(eval_result.get("score", 0.0))
 
         if not ans_record:
             ans_record = ExplanationAnswer(
+                question_id=q.id,
+                student_id=current_user.id,
+                student_response=item.student_answer,
                 explanation_question_id=q.id,
                 student_answer=item.student_answer,
-                evaluation=eval_result["evaluation"],
-                score=eval_result["score"]
+                evaluation=eval_text,
+                ai_feedback=eval_text,
+                score=eval_score
             )
             db.add(ans_record)
         else:
+            ans_record.question_id = q.id
+            ans_record.student_id = current_user.id
+            ans_record.student_response = item.student_answer
             ans_record.student_answer = item.student_answer
-            ans_record.evaluation = eval_result["evaluation"]
-            ans_record.score = eval_result["score"]
+            ans_record.evaluation = eval_text
+            ans_record.ai_feedback = eval_text
+            ans_record.score = eval_score
 
         total_score += eval_result["score"]
         evaluated_list.append(EvaluatedAnswerResponse(

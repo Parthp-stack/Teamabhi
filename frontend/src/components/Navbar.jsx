@@ -57,7 +57,7 @@ export default function Navbar() {
         <div>
           <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
             <span style={{ fontWeight: 800, fontSize: '18px', color: '#0f172a', letterSpacing: '-0.02em' }}>
-              AdaptivePortal
+              Adapt<span style={{ color: '#4f46e5' }}>IQ</span>
             </span>
             <span
               style={{

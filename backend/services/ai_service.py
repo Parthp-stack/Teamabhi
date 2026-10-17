@@ -10,7 +10,7 @@ class AIService:
         headers = {
             "Content-Type": "application/json",
             "HTTP-Referer": settings.FRONTEND_URL,
-            "X-Title": "Adaptive Learning & Assessment Portal"
+            "X-Title": "AdaptIQ"
         }
         if settings.OPENROUTER_API_KEY:
             headers["Authorization"] = f"Bearer {settings.OPENROUTER_API_KEY}"

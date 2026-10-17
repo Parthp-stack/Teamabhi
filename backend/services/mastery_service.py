@@ -108,7 +108,7 @@ class MasteryService:
             concept_id=concept_id,
             mastery_score=mastery_record.mastery_score,
             change_amount=round(delta, 1),
-            reason=reason,
+            reason=reason[:250] if reason else None,
             timestamp=datetime.now(timezone.utc)
         )
         db.add(history)

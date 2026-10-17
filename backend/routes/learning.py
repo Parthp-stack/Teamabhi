@@ -867,7 +867,7 @@ def get_assessment_state(
     attempt = db.query(AssessmentAttempt).filter(AssessmentAttempt.id == attempt_id).first()
     if not attempt:
         raise HTTPException(status_code=404, detail="Assessment attempt not found")
-    if attempt.student_id != current_user.id and current_user.role != "trainer":
+    if attempt.student_id != current_user.id and (current_user.role or "").lower() != "trainer":
         raise HTTPException(status_code=403, detail="Forbidden")
 
     return build_assessment_state_dict(attempt, db)
@@ -885,7 +885,7 @@ def navigate_assessment_question(
     attempt = db.query(AssessmentAttempt).filter(AssessmentAttempt.id == attempt_id).first()
     if not attempt:
         raise HTTPException(status_code=404, detail="Assessment attempt not found")
-    if attempt.student_id != current_user.id and current_user.role != "trainer":
+    if attempt.student_id != current_user.id and (current_user.role or "").lower() != "trainer":
         raise HTTPException(status_code=403, detail="Forbidden")
 
     target_qa = db.query(QuestionAttempt).filter(
@@ -932,7 +932,7 @@ def save_assessment_answer(
     attempt = db.query(AssessmentAttempt).filter(AssessmentAttempt.id == attempt_id).first()
     if not attempt:
         raise HTTPException(status_code=404, detail="Assessment attempt not found")
-    if attempt.student_id != current_user.id and current_user.role != "trainer":
+    if attempt.student_id != current_user.id and (current_user.role or "").lower() != "trainer":
         raise HTTPException(status_code=403, detail="Forbidden")
 
     qa_q = db.query(QuestionAttempt).filter(QuestionAttempt.attempt_id == attempt.id)
@@ -1035,7 +1035,7 @@ def next_assessment_question(
     attempt = db.query(AssessmentAttempt).filter(AssessmentAttempt.id == attempt_id).first()
     if not attempt:
         raise HTTPException(status_code=404, detail="Assessment attempt not found")
-    if attempt.student_id != current_user.id and current_user.role != "trainer":
+    if attempt.student_id != current_user.id and (current_user.role or "").lower() != "trainer":
         raise HTTPException(status_code=403, detail="Forbidden")
 
     curr_idx = attempt.current_question_index or 1
@@ -1130,7 +1130,7 @@ def previous_assessment_question(
     attempt = db.query(AssessmentAttempt).filter(AssessmentAttempt.id == attempt_id).first()
     if not attempt:
         raise HTTPException(status_code=404, detail="Assessment attempt not found")
-    if attempt.student_id != current_user.id and current_user.role != "trainer":
+    if attempt.student_id != current_user.id and (current_user.role or "").lower() != "trainer":
         raise HTTPException(status_code=403, detail="Forbidden")
 
     curr_idx = attempt.current_question_index or 1
@@ -1169,7 +1169,7 @@ def finish_assessment_attempt(
     attempt = db.query(AssessmentAttempt).filter(AssessmentAttempt.id == attempt_id).first()
     if not attempt:
         raise HTTPException(status_code=404, detail="Assessment attempt not found")
-    if attempt.student_id != current_user.id and current_user.role != "trainer":
+    if attempt.student_id != current_user.id and (current_user.role or "").lower() != "trainer":
         raise HTTPException(status_code=403, detail="Forbidden")
 
     # Compute final score

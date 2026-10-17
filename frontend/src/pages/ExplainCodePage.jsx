@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { useParams, useNavigate } from 'react-router-dom';
+import { useParams, useNavigate, useLocation } from 'react-router-dom';
 import { codingService } from '../services/codingService';
 import {
   Sparkles,
@@ -14,6 +14,11 @@ import {
 export default function ExplainCodePage() {
   const { submissionId } = useParams();
   const navigate = useNavigate();
+  const location = useLocation();
+
+  const nextProblemId = location.state?.nextProblemId;
+  const nextProblemTitle = location.state?.nextProblemTitle;
+  const currentProblemTitle = location.state?.problemTitle;
 
   const [questions, setQuestions] = useState([]);
   const [answers, setAnswers] = useState({});
@@ -103,6 +108,46 @@ export default function ExplainCodePage() {
           Our AI engine inspected your submitted implementation and generated 2–3 targeted technical questions.
           Explain the rationale, algorithmic trade-offs, and invariants in your code below.
         </p>
+        {(currentProblemTitle || nextProblemId) && (
+          <div
+            style={{
+              marginTop: '16px',
+              paddingTop: '14px',
+              borderTop: '1px solid #f1f5f9',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'space-between',
+              flexWrap: 'wrap',
+              gap: '8px',
+            }}
+          >
+            {currentProblemTitle && (
+              <span style={{ fontSize: '13px', color: '#64748b' }}>
+                Completed Submission for: <strong style={{ color: '#1e293b' }}>{currentProblemTitle}</strong>
+              </span>
+            )}
+            {nextProblemId && (
+              <button
+                type="button"
+                onClick={() => navigate('/student/coding', { state: { problemId: nextProblemId } })}
+                style={{
+                  background: 'none',
+                  border: 'none',
+                  color: '#4f46e5',
+                  fontSize: '13px',
+                  fontWeight: 700,
+                  cursor: 'pointer',
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '4px',
+                  padding: 0,
+                }}
+              >
+                Skip viva & jump to Next Problem ({nextProblemTitle || `#${nextProblemId}`}) <ArrowRight size={14} />
+              </button>
+            )}
+          </div>
+        )}
       </div>
 
       {/* Questions Form or Evaluation Results */}
@@ -431,25 +476,77 @@ export default function ExplainCodePage() {
             ))}
           </div>
 
-          <button
-            onClick={() => navigate('/student/dashboard')}
-            style={{
-              padding: '14px',
-              backgroundColor: '#4f46e5',
-              color: '#ffffff',
-              border: 'none',
-              borderRadius: '10px',
-              fontWeight: 700,
-              fontSize: '15px',
-              cursor: 'pointer',
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'center',
-              gap: '8px',
-            }}
-          >
-            Return to Student Dashboard <ArrowRight size={18} />
-          </button>
+          <div style={{ display: 'flex', gap: '12px', marginTop: '12px' }}>
+            {nextProblemId ? (
+              <button
+                type="button"
+                onClick={() => navigate('/student/coding', { state: { problemId: nextProblemId } })}
+                style={{
+                  flex: 1,
+                  padding: '14px',
+                  backgroundColor: '#059669',
+                  color: '#ffffff',
+                  border: 'none',
+                  borderRadius: '10px',
+                  fontWeight: 700,
+                  fontSize: '15px',
+                  cursor: 'pointer',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  gap: '8px',
+                  boxShadow: '0 4px 10px rgba(5, 150, 105, 0.25)',
+                }}
+              >
+                Continue to Next Problem {nextProblemTitle ? `(${nextProblemTitle})` : `(#${nextProblemId})`} <ArrowRight size={18} />
+              </button>
+            ) : (
+              <button
+                type="button"
+                onClick={() => navigate('/student/coding')}
+                style={{
+                  flex: 1,
+                  padding: '14px',
+                  backgroundColor: '#059669',
+                  color: '#ffffff',
+                  border: 'none',
+                  borderRadius: '10px',
+                  fontWeight: 700,
+                  fontSize: '15px',
+                  cursor: 'pointer',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  gap: '8px',
+                  boxShadow: '0 4px 10px rgba(5, 150, 105, 0.25)',
+                }}
+              >
+                Back to Coding Challenges <ArrowRight size={18} />
+              </button>
+            )}
+
+            <button
+              type="button"
+              onClick={() => navigate('/student/dashboard')}
+              style={{
+                flex: 1,
+                padding: '14px',
+                backgroundColor: '#ffffff',
+                color: '#475569',
+                border: '1px solid #cbd5e1',
+                borderRadius: '10px',
+                fontWeight: 700,
+                fontSize: '15px',
+                cursor: 'pointer',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                gap: '8px',
+              }}
+            >
+              Return to Student Dashboard
+            </button>
+          </div>
         </div>
       )}
     </div>

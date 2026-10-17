@@ -44,7 +44,7 @@ class GitHubEvaluationService:
         try:
             req = urllib.request.Request(
                 api_url,
-                headers={"User-Agent": "AdaptiveLearningPortal-RepoEvaluator/1.0"}
+                headers={"User-Agent": "AdaptIQ-RepoEvaluator/1.0"}
             )
             with urllib.request.urlopen(req, timeout=5) as response:
                 if response.status == 200:

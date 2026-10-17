@@ -57,7 +57,7 @@ async def lifespan(app: FastAPI):
 app = FastAPI(
     title=settings.PROJECT_NAME,
     version=settings.VERSION,
-    description="Adaptive Learning & Assessment Portal with Evidence-Based Integrity Signals & Sandbox Execution",
+    description="AdaptIQ - Adaptive Learning & Assessment Platform with Evidence-Based Integrity Signals & Sandbox Execution",
     lifespan=lifespan
 )
 

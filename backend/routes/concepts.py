@@ -2,6 +2,7 @@ from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 from typing import Optional, List, Dict, Any
 from backend.database import get_db
+from backend.models.course import Course, Module
 from backend.models.user import User
 from backend.models.concept import Concept
 from backend.models.mastery import StudentMastery
@@ -15,6 +16,7 @@ router = APIRouter(prefix="/concepts", tags=["Concepts"])
 @router.get("/graph")
 def get_concept_graph(
     student_id: Optional[int] = None,
+    course_id: Optional[int] = None,
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db)
 ):
@@ -22,7 +24,10 @@ def get_concept_graph(
     if student_id and current_user.role == "TRAINER":
         target_student_id = student_id
 
-    concepts: List[Concept] = db.query(Concept).order_by(Concept.order_index.asc()).all()
+    query = db.query(Concept).order_by(Concept.order_index.asc())
+    if course_id:
+        query = query.join(Concept.module).filter(Module.course_id == course_id)
+    concepts: List[Concept] = query.all()
 
     # Load masteries for target student
     masteries = {
@@ -35,17 +40,38 @@ def get_concept_graph(
     nodes = []
     edges = []
 
-    # Horizontal DAG layout coordinates for the 7 concepts:
-    # Programming Basics -> Classes -> Objects -> Constructors -> Inheritance -> Polymorphism -> Dependency Injection
+    # 2D Tiered DAG layout coordinates for clean multi-row clusters (fixed square nodes):
     layout_map = {
-        "Programming Basics": {"x": 50, "y": 180},
-        "Classes": {"x": 260, "y": 180},
-        "Objects": {"x": 470, "y": 180},
-        "Constructors": {"x": 680, "y": 180},
-        "Inheritance": {"x": 890, "y": 180},
-        "Polymorphism": {"x": 1100, "y": 180},
-        "Dependency Injection": {"x": 1310, "y": 180}
+        # Course 1: Object Oriented Programming (Hierarchical DAG)
+        "Programming Basics": {"x": 80, "y": 80},
+        "Classes": {"x": 280, "y": 80},
+        "Objects": {"x": 480, "y": 30},
+        "Constructors": {"x": 480, "y": 220},
+        "Encapsulation": {"x": 680, "y": 30},
+        "Inheritance": {"x": 680, "y": 220},
+        "Polymorphism": {"x": 880, "y": 220},
+        "Dependency Injection": {"x": 1080, "y": 220},
+
+        # Course 2: Data Structures (Curriculum Modules)
+        # Searching Module
+        "Linear Search": {"x": 80, "y": 420},
+        "Binary Search": {"x": 280, "y": 420},
+        "Sentinel Search": {"x": 480, "y": 420},
+        # Sorting Module
+        "Bubble Sort": {"x": 80, "y": 620},
+        "Merge Sort": {"x": 280, "y": 620},
+        "Quick Sort": {"x": 480, "y": 620},
+        # Linked List Module
+        "Singly Linked List": {"x": 720, "y": 420},
+        "Doubly Linked List": {"x": 920, "y": 420},
+        # Stack & Queue Modules
+        "Stack Operations": {"x": 720, "y": 620},
+        "Valid Parentheses": {"x": 920, "y": 620},
+        "Queue Basics": {"x": 720, "y": 820},
+        "Circular Queue": {"x": 920, "y": 820}
     }
+
+    concept_id_set = {c.id for c in concepts}
 
     for idx, c in enumerate(concepts):
         m = masteries.get(c.id)
@@ -56,7 +82,18 @@ def get_concept_graph(
 
         prereq_eval = AdaptiveEngine.evaluate_prerequisites(c, mastery_map)
         status = MasteryService.get_concept_status(score, prereq_eval["eligible"])
-        pos = layout_map.get(c.name, {"x": 50 + idx * 210, "y": 180})
+        
+        # 2D grid fallback if concept not explicitly mapped (avoids single straight line)
+        pos = layout_map.get(c.name, {"x": 80 + (idx % 4) * 200, "y": 80 + (idx // 4) * 200})
+
+        course_title = "Data Structures"
+        module_title = "General"
+        course_id_val = None
+        if c.module:
+            module_title = c.module.title
+            if c.module.course:
+                course_title = c.module.course.title
+                course_id_val = c.module.course.id
 
         nodes.append({
             "id": str(c.id),
@@ -71,21 +108,30 @@ def get_concept_graph(
                 "attempts": attempts,
                 "correct_attempts": correct_attempts,
                 "accuracy": accuracy,
+                "course_id": course_id_val,
+                "course_title": course_title,
+                "module_title": module_title,
                 "prerequisites": [p.id for p in c.prerequisites],
                 "dependents": [d.id for d in c.dependents]
             }
         })
 
         for p in c.prerequisites:
-            edges.append({
-                "id": f"e{p.id}-{c.id}",
-                "source": str(p.id),
-                "target": str(c.id),
-                "animated": status in ["DEVELOPING", "WEAK"],
-                "style": {"stroke": "#6366f1", "strokeWidth": 2}
-            })
+            if p.id in concept_id_set:
+                edges.append({
+                    "id": f"e{p.id}-{c.id}",
+                    "source": str(p.id),
+                    "target": str(c.id),
+                    "animated": status in ["DEVELOPING", "WEAK"],
+                    "style": {"stroke": "#6366f1", "strokeWidth": 2}
+                })
 
-    return {"nodes": nodes, "edges": edges}
+    courses_list = [
+        {"id": course.id, "title": course.title}
+        for course in db.query(Course).all()
+    ]
+
+    return {"nodes": nodes, "edges": edges, "courses": courses_list}
 
 @router.get("/{concept_id}")
 def get_concept_detail(

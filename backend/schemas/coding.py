@@ -13,10 +13,10 @@ class CodingProblemResponse(BaseModel):
     id: int
     title: str
     description: str
-    difficulty: str
-    allowed_languages: List[str]
-    time_limit: float
-    memory_limit: int
+    difficulty: Optional[str] = "MEDIUM"
+    allowed_languages: Optional[List[str]] = ["python", "cpp", "c", "java", "javascript"]
+    time_limit: Optional[float] = 2.0
+    memory_limit: Optional[int] = 128
     visible_test_cases: List[TestCaseVisible] = []
     
     # Comprehensive problem definition fields (Requirement 3)

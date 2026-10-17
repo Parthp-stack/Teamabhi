@@ -1,12 +1,97 @@
 import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { authService } from '../services/authService';
-import { Lock, Mail, User, Sparkles, GraduationCap, ShieldCheck } from 'lucide-react';
+import {
+  GraduationCap,
+  Users,
+  Mail,
+  Lock,
+  Eye,
+  EyeOff,
+  ArrowRight,
+  BookOpen,
+  Target,
+  BarChart3,
+  User,
+  Sparkles,
+  AlertCircle,
+  CheckCircle2,
+  X,
+  HelpCircle,
+  Info
+} from 'lucide-react';
+import './Login.css';
+
+// Assets
+import studentWorkspaceImg from '../assets/student-workspace.png';
+import cardLogoImg from '../assets/logo-icon-card.png';
+
+// Scalable Vector Logo Component matching the exact emblem from design
+function AdaptiveLogo({ size = 42, light = false }) {
+  return (
+    <svg
+      width={size}
+      height={size}
+      viewBox="0 0 100 100"
+      fill="none"
+      xmlns="http://www.w3.org/2000/svg"
+      style={{ filter: light ? 'drop-shadow(0 0 10px rgba(167, 139, 250, 0.6))' : 'none' }}
+    >
+      <defs>
+        <linearGradient id="logoGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+          <stop offset="0%" stopColor={light ? '#c084fc' : '#6366f1'} />
+          <stop offset="100%" stopColor={light ? '#818cf8' : '#4f46e5'} />
+        </linearGradient>
+        <linearGradient id="glowGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+          <stop offset="0%" stopColor="#a855f7" />
+          <stop offset="100%" stopColor="#3b82f6" />
+        </linearGradient>
+      </defs>
+      {/* Emerging Dot / Head */}
+      <circle cx="50" cy="18" r="8" fill={light ? '#ffffff' : '#4f46e5'} />
+      {/* Sprouting Wings / Leaves */}
+      <path
+        d="M50 48 C44 32, 28 26, 30 20 C36 24, 46 32, 50 48 Z"
+        fill={light ? '#e9d5ff' : '#6366f1'}
+      />
+      <path
+        d="M50 48 C56 32, 72 26, 70 20 C64 24, 54 32, 50 48 Z"
+        fill={light ? '#c084fc' : '#4f46e5'}
+      />
+      {/* Book Outer Pages */}
+      <path
+        d="M14 42 L14 74 C26 78, 38 86, 50 92 C62 86, 74 78, 86 74 L86 42 C74 46, 62 52, 50 56 C38 52, 26 46, 14 42 Z"
+        stroke={light ? '#c084fc' : '#4f46e5'}
+        strokeWidth="6"
+        strokeLinejoin="round"
+        fill="none"
+      />
+      {/* Inner Open Book Flaps */}
+      <path
+        d="M26 45 C34 49, 42 53, 50 55 L50 86 C42 82, 34 76, 26 72 Z"
+        fill={light ? 'rgba(192, 132, 252, 0.2)' : 'none'}
+        stroke={light ? '#a855f7' : '#6366f1'}
+        strokeWidth="5"
+        strokeLinejoin="round"
+      />
+      <path
+        d="M74 45 C66 49, 58 53, 50 55 L50 86 C58 82, 66 76, 74 72 Z"
+        fill={light ? 'rgba(99, 102, 241, 0.2)' : 'none'}
+        stroke={light ? '#818cf8' : '#4f46e5'}
+        strokeWidth="5"
+        strokeLinejoin="round"
+      />
+      {/* Center Spine */}
+      <line x1="50" y1="52" x2="50" y2="88" stroke={light ? '#ffffff' : '#312e81'} strokeWidth="5" strokeLinecap="round" />
+    </svg>
+  );
+}
 
 export default function Login() {
   const navigate = useNavigate();
   const [activeRole, setActiveRole] = useState('STUDENT'); // 'STUDENT' or 'TRAINER'
   const [isRegistering, setIsRegistering] = useState(false);
+  const [showPassword, setShowPassword] = useState(false);
 
   // Form fields
   const [name, setName] = useState('');
@@ -15,9 +100,13 @@ export default function Login() {
   const [targetSubject, setTargetSubject] = useState('Data Structures');
   const [department, setDepartment] = useState('Computer Science');
 
+  // Status feedback
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
   const [successMsg, setSuccessMsg] = useState('');
+
+  // Info Modal states for top nav
+  const [activeModal, setActiveModal] = useState(null); // 'features' | 'about' | 'contact' | 'forgot' | null
 
   const handleAuth = async (e) => {
     if (e) e.preventDefault();
@@ -28,7 +117,7 @@ export default function Login() {
     try {
       if (isRegistering) {
         if (!name.trim()) {
-          setError('Please enter your full name.');
+          setError('Please enter your full name to create an account.');
           setLoading(false);
           return;
         }
@@ -83,395 +172,448 @@ export default function Login() {
   };
 
   return (
-    <div
-      style={{
-        minHeight: '100vh',
-        display: 'flex',
-        alignItems: 'center',
-        justifyContent: 'center',
-        backgroundColor: '#f8fafc',
-        padding: '24px',
-      }}
-    >
-      <div
-        style={{
-          width: '100%',
-          maxWidth: '520px',
-          backgroundColor: '#ffffff',
-          borderRadius: '20px',
-          boxShadow: '0 10px 25px -5px rgba(0, 0, 0, 0.08), 0 8px 10px -6px rgba(0, 0, 0, 0.05)',
-          border: '1px solid #e2e8f0',
-          padding: '36px',
-        }}
-      >
-        {/* Header */}
-        <div style={{ textAlign: 'center', marginBottom: '24px' }}>
-          <div
-            style={{
-              width: '52px',
-              height: '52px',
-              borderRadius: '14px',
-              backgroundColor: activeRole === 'STUDENT' ? '#4f46e5' : '#059669',
-              display: 'inline-flex',
-              alignItems: 'center',
-              justifyContent: 'center',
-              color: '#ffffff',
-              fontWeight: 800,
-              fontSize: '26px',
-              marginBottom: '12px',
-              transition: 'background-color 0.2s',
-            }}
-          >
-            {activeRole === 'STUDENT' ? <GraduationCap size={28} /> : <ShieldCheck size={28} />}
+    <div className="login-page-container">
+      {/* Top Navigation Bar */}
+      <header className="login-navbar">
+        <div className="login-nav-logo" onClick={() => window.scrollTo({ top: 0, behavior: 'smooth' })}>
+          <AdaptiveLogo size={42} light={true} />
+          <div className="login-nav-logo-text">
+            <span className="login-nav-brand">
+              Adapt<span>IQ</span>
+            </span>
+            <span className="login-nav-tagline">
+              Adaptive Assessment & Learning Platform
+            </span>
           </div>
-          <h1 style={{ fontSize: '24px', fontWeight: 800, color: '#0f172a', margin: '0 0 6px 0' }}>
-            Adaptive Learning Portal
+        </div>
+
+        <nav className="login-nav-links">
+          <button
+            type="button"
+            className="login-nav-link"
+            onClick={() => window.scrollTo({ top: 0, behavior: 'smooth' })}
+          >
+            Home
+          </button>
+          <button
+            type="button"
+            className="login-nav-link"
+            onClick={() => setActiveModal('features')}
+          >
+            Features
+          </button>
+          <button
+            type="button"
+            className="login-nav-link"
+            onClick={() => setActiveModal('about')}
+          >
+            About
+          </button>
+          <button
+            type="button"
+            className="login-nav-link"
+            onClick={() => setActiveModal('contact')}
+          >
+            Contact
+          </button>
+        </nav>
+      </header>
+
+      {/* Main Hero & Auth Section */}
+      <main className="login-main-content">
+        {/* Left Column: Hero Text, Feature Badges & 3D Artwork */}
+        <section className="login-hero-section">
+          <h1 className="login-hero-headline">
+            Learn at <span className="login-text-gradient-purple">your pace.</span>
+            <br />
+            Prove what <span className="login-text-gradient-cyan">you know.</span>
           </h1>
-          <p style={{ fontSize: '14px', color: '#64748b', margin: 0 }}>
-            {activeRole === 'STUDENT'
-              ? 'Student Portal · Knowledge Tracing & Concept-Based Practice'
-              : 'Teacher Portal · Curriculum Management & Cohort Analytics'}
+
+          <p className="login-hero-subtitle">
+            Personalized learning paths, adaptive assessments and verified skills for a brighter future.
           </p>
-        </div>
 
-        {/* Role Separation Tabs: Student vs Teacher */}
-        <div
-          style={{
-            display: 'flex',
-            backgroundColor: '#f1f5f9',
-            borderRadius: '12px',
-            padding: '4px',
-            marginBottom: '20px',
-          }}
-        >
-          <button
-            type="button"
-            onClick={() => handleRoleSwitch('STUDENT')}
-            style={{
-              flex: 1,
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'center',
-              gap: '8px',
-              padding: '10px 14px',
-              borderRadius: '10px',
-              border: 'none',
-              backgroundColor: activeRole === 'STUDENT' ? '#ffffff' : 'transparent',
-              color: activeRole === 'STUDENT' ? '#4f46e5' : '#64748b',
-              fontWeight: activeRole === 'STUDENT' ? 800 : 600,
-              fontSize: '14px',
-              cursor: 'pointer',
-              boxShadow: activeRole === 'STUDENT' ? '0 1px 3px rgba(0,0,0,0.1)' : 'none',
-              transition: 'all 0.15s',
-            }}
-          >
-            <GraduationCap size={16} />
-            Student Portal
-          </button>
-          <button
-            type="button"
-            onClick={() => handleRoleSwitch('TRAINER')}
-            style={{
-              flex: 1,
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'center',
-              gap: '8px',
-              padding: '10px 14px',
-              borderRadius: '10px',
-              border: 'none',
-              backgroundColor: activeRole === 'TRAINER' ? '#ffffff' : 'transparent',
-              color: activeRole === 'TRAINER' ? '#059669' : '#64748b',
-              fontWeight: activeRole === 'TRAINER' ? 800 : 600,
-              fontSize: '14px',
-              cursor: 'pointer',
-              boxShadow: activeRole === 'TRAINER' ? '0 1px 3px rgba(0,0,0,0.1)' : 'none',
-              transition: 'all 0.15s',
-            }}
-          >
-            <ShieldCheck size={16} />
-            Teacher / Trainer
-          </button>
-        </div>
-
-        {/* Mode Toggle: Sign In vs Register */}
-        <div style={{ display: 'flex', justifyContent: 'center', gap: '16px', marginBottom: '20px' }}>
-          <button
-            type="button"
-            onClick={() => { setIsRegistering(false); setError(''); setSuccessMsg(''); }}
-            style={{
-              background: 'none',
-              border: 'none',
-              padding: '6px 12px',
-              fontSize: '13px',
-              fontWeight: !isRegistering ? 800 : 600,
-              color: !isRegistering ? (activeRole === 'STUDENT' ? '#4f46e5' : '#059669') : '#64748b',
-              borderBottom: !isRegistering ? `2px solid ${activeRole === 'STUDENT' ? '#4f46e5' : '#059669'}` : '2px solid transparent',
-              cursor: 'pointer',
-            }}
-          >
-            {activeRole === 'STUDENT' ? 'Student Sign In' : 'Teacher Sign In'}
-          </button>
-          <button
-            type="button"
-            onClick={() => { setIsRegistering(true); setError(''); setSuccessMsg(''); }}
-            style={{
-              background: 'none',
-              border: 'none',
-              padding: '6px 12px',
-              fontSize: '13px',
-              fontWeight: isRegistering ? 800 : 600,
-              color: isRegistering ? (activeRole === 'STUDENT' ? '#4f46e5' : '#059669') : '#64748b',
-              borderBottom: isRegistering ? `2px solid ${activeRole === 'STUDENT' ? '#4f46e5' : '#059669'}` : '2px solid transparent',
-              cursor: 'pointer',
-            }}
-          >
-            {activeRole === 'STUDENT' ? 'Student Register' : 'Teacher Register'}
-          </button>
-        </div>
-
-        {/* Demo Accounts Quick-Fill Box (Only on Sign In) */}
-        {!isRegistering && (
-          <div
-            style={{
-              backgroundColor: '#f8fafc',
-              borderRadius: '12px',
-              padding: '12px 14px',
-              marginBottom: '20px',
-              border: '1px solid #e2e8f0',
-            }}
-          >
-            <div style={{ display: 'flex', alignItems: 'center', gap: '6px', marginBottom: '8px' }}>
-              <Sparkles size={14} color={activeRole === 'STUDENT' ? '#4f46e5' : '#059669'} />
-              <span style={{ fontSize: '11px', fontWeight: 700, color: '#334155', textTransform: 'uppercase' }}>
-                Quick Demo Access (Click to Load)
-              </span>
-            </div>
-            {activeRole === 'STUDENT' ? (
-              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '8px' }}>
-                <button
-                  type="button"
-                  onClick={() => setDemoAccount('student.a@adaptive.edu', 'student123', 'STUDENT')}
-                  style={{
-                    textAlign: 'left',
-                    padding: '8px 10px',
-                    borderRadius: '8px',
-                    backgroundColor: email === 'student.a@adaptive.edu' ? '#e0e7ff' : '#ffffff',
-                    border: email === 'student.a@adaptive.edu' ? '1.5px solid #4f46e5' : '1px solid #cbd5e1',
-                    fontSize: '11px',
-                    cursor: 'pointer',
-                  }}
-                >
-                  <div style={{ fontWeight: 800, color: '#1e293b' }}>Student A (Alice)</div>
-                  <div style={{ color: '#4338ca', fontSize: '10px' }}>Binary Search: 38% (Weak)</div>
-                </button>
-
-                <button
-                  type="button"
-                  onClick={() => setDemoAccount('student.b@adaptive.edu', 'student123', 'STUDENT')}
-                  style={{
-                    textAlign: 'left',
-                    padding: '8px 10px',
-                    borderRadius: '8px',
-                    backgroundColor: email === 'student.b@adaptive.edu' ? '#e0e7ff' : '#ffffff',
-                    border: email === 'student.b@adaptive.edu' ? '1.5px solid #4f46e5' : '1px solid #cbd5e1',
-                    fontSize: '11px',
-                    cursor: 'pointer',
-                  }}
-                >
-                  <div style={{ fontWeight: 800, color: '#1e293b' }}>Student B (Bob)</div>
-                  <div style={{ color: '#4338ca', fontSize: '10px' }}>Target: Basics / Classes</div>
-                </button>
+          {/* 3 Highlight Badges */}
+          <div className="login-features-row">
+            <div className="login-feature-card">
+              <div className="login-feature-icon-box purple">
+                <BookOpen size={20} />
               </div>
-            ) : (
+              <div>
+                <div className="login-feature-title">Adaptive Learning</div>
+                <div className="login-feature-desc">Learn what you need</div>
+              </div>
+            </div>
+
+            <div className="login-feature-card">
+              <div className="login-feature-icon-box blue">
+                <Target size={20} />
+              </div>
+              <div>
+                <div className="login-feature-title">Smart Assessments</div>
+                <div className="login-feature-desc">Questions that adapt</div>
+              </div>
+            </div>
+
+            <div className="login-feature-card">
+              <div className="login-feature-icon-box indigo">
+                <BarChart3 size={20} />
+              </div>
+              <div>
+                <div className="login-feature-title">Verified Skills</div>
+                <div className="login-feature-desc">Real progress. Real results.</div>
+              </div>
+            </div>
+          </div>
+
+          {/* 3D Student Character & Floating UI Cards */}
+          <div className="login-illustration-container">
+            <img
+              src={studentWorkspaceImg}
+              alt="Interactive learning journey with adaptive mastery visualization"
+              className="login-illustration-img"
+            />
+          </div>
+        </section>
+
+        {/* Right Column: Clean White Sign-in / Register Card */}
+        <section className="login-card-section">
+          <div className="login-white-card">
+            {/* Card Header & Logo */}
+            <div className="login-card-header">
+              <div className="login-card-brand-row">
+                {cardLogoImg ? (
+                  <img src={cardLogoImg} alt="AdaptIQ Logo" />
+                ) : (
+                  <AdaptiveLogo size={42} light={false} />
+                )}
+                <div>
+                  <div className="login-card-brand-title">
+                    Adapt<span>IQ</span>
+                  </div>
+                  <div className="login-card-brand-sub">
+                    Adaptive Assessment & Learning Platform
+                  </div>
+                </div>
+              </div>
+
+              <h2 className="login-card-welcome-title">
+                {isRegistering ? 'Create Account 🚀' : 'Welcome Back 👋'}
+              </h2>
+              <p className="login-card-welcome-subtitle">
+                {isRegistering
+                  ? 'Join to start your personalized learning pathway.'
+                  : 'Sign in to continue your learning journey.'}
+              </p>
+            </div>
+
+            {/* Role Switcher Tabs */}
+            <div className="login-role-tabs">
               <button
                 type="button"
-                onClick={() => setDemoAccount('trainer@adaptive.edu', 'trainer123', 'TRAINER')}
-                style={{
-                  width: '100%',
-                  textAlign: 'left',
-                  padding: '8px 12px',
-                  borderRadius: '8px',
-                  backgroundColor: '#d1fae5',
-                  border: '1.5px solid #059669',
-                  fontSize: '12px',
-                  cursor: 'pointer',
-                }}
+                className={`login-role-tab-btn ${activeRole === 'STUDENT' ? 'active' : ''}`}
+                onClick={() => handleRoleSwitch('STUDENT')}
               >
-                <div style={{ fontWeight: 800, color: '#065f46' }}>Trainer (Dr. Alan Turing)</div>
-                <div style={{ color: '#047857', fontSize: '11px' }}>Curriculum manager, student analytics & VIVA audits</div>
+                <GraduationCap size={18} />
+                Student
               </button>
+              <button
+                type="button"
+                className={`login-role-tab-btn ${activeRole === 'TRAINER' ? 'trainer-active' : ''}`}
+                onClick={() => handleRoleSwitch('TRAINER')}
+              >
+                <Users size={18} />
+                Trainer
+              </button>
+            </div>
+
+            {/* Error & Success Feedback */}
+            {error && (
+              <div className="login-alert login-alert-error">
+                <AlertCircle size={16} />
+                <span>{error}</span>
+              </div>
+            )}
+            {successMsg && (
+              <div className="login-alert login-alert-success">
+                <CheckCircle2 size={16} />
+                <span>{successMsg}</span>
+              </div>
+            )}
+
+            {/* Form */}
+            <form onSubmit={handleAuth}>
+              {isRegistering && (
+                <div className="login-form-group">
+                  <label className="login-form-label">Full Name</label>
+                  <div className="login-input-wrapper">
+                    <User size={18} className="login-input-icon" />
+                    <input
+                      type="text"
+                      placeholder={activeRole === 'STUDENT' ? 'e.g. John Doe' : 'e.g. Prof. Alan Turing'}
+                      value={name}
+                      onChange={(e) => setName(e.target.value)}
+                      required
+                      className="login-input-field"
+                    />
+                  </div>
+                </div>
+              )}
+
+              <div className="login-form-group">
+                <label className="login-form-label">Email / Student ID</label>
+                <div className="login-input-wrapper">
+                  <Mail size={18} className="login-input-icon" />
+                  <input
+                    type="email"
+                    placeholder="Enter your email or student ID"
+                    value={email}
+                    onChange={(e) => setEmail(e.target.value)}
+                    required
+                    className="login-input-field"
+                  />
+                </div>
+              </div>
+
+              <div className="login-form-group">
+                <label className="login-form-label">Password</label>
+                <div className="login-input-wrapper">
+                  <Lock size={18} className="login-input-icon" />
+                  <input
+                    type={showPassword ? 'text' : 'password'}
+                    placeholder="Enter your password"
+                    value={password}
+                    onChange={(e) => setPassword(e.target.value)}
+                    required
+                    className="login-input-field"
+                  />
+                  <button
+                    type="button"
+                    className="login-password-toggle"
+                    onClick={() => setShowPassword(!showPassword)}
+                    tabIndex="-1"
+                    title={showPassword ? 'Hide password' : 'Show password'}
+                  >
+                    {showPassword ? <EyeOff size={18} /> : <Eye size={18} />}
+                  </button>
+                </div>
+              </div>
+
+              {isRegistering && activeRole === 'STUDENT' && (
+                <div className="login-form-group">
+                  <label className="login-form-label">Target Subject</label>
+                  <div className="login-input-wrapper">
+                    <select
+                      value={targetSubject}
+                      onChange={(e) => setTargetSubject(e.target.value)}
+                      className="login-input-field"
+                      style={{ paddingLeft: '14px' }}
+                    >
+                      <option value="Data Structures">Data Structures (Searching, Sorting, Linked Lists)</option>
+                      <option value="Object Oriented Programming">Object Oriented Programming (Classes, Inheritance)</option>
+                    </select>
+                  </div>
+                </div>
+              )}
+
+              {isRegistering && activeRole === 'TRAINER' && (
+                <div className="login-form-group">
+                  <label className="login-form-label">Academic Department</label>
+                  <div className="login-input-wrapper">
+                    <input
+                      type="text"
+                      placeholder="e.g. Computer Science"
+                      value={department}
+                      onChange={(e) => setDepartment(e.target.value)}
+                      className="login-input-field"
+                      style={{ paddingLeft: '14px' }}
+                    />
+                  </div>
+                </div>
+              )}
+
+              {!isRegistering && (
+                <div className="login-forgot-row">
+                  <button
+                    type="button"
+                    className="login-forgot-btn"
+                    onClick={() => setActiveModal('forgot')}
+                  >
+                    Forgot Password?
+                  </button>
+                </div>
+              )}
+
+              <button
+                type="submit"
+                disabled={loading}
+                className={`login-submit-btn ${activeRole === 'TRAINER' ? 'trainer-btn' : ''}`}
+              >
+                <span>
+                  {loading
+                    ? 'Authenticating...'
+                    : isRegistering
+                    ? `Create ${activeRole === 'STUDENT' ? 'Student' : 'Trainer'} Account`
+                    : 'Sign In'}
+                </span>
+                {!loading && <ArrowRight size={18} />}
+              </button>
+            </form>
+
+            {/* Divider */}
+            <div className="login-divider-row">
+              <div className="login-divider-line" />
+              <div className="login-divider-text">OR</div>
+              <div className="login-divider-line" />
+            </div>
+
+            {/* Footer: Toggle Mode */}
+            <div className="login-card-footer">
+              {!isRegistering ? (
+                <>
+                  Don't have an account?{' '}
+                  <button
+                    type="button"
+                    className="login-switch-mode-btn"
+                    onClick={() => {
+                      setIsRegistering(true);
+                      setError('');
+                      setSuccessMsg('');
+                    }}
+                  >
+                    Create account
+                  </button>
+                </>
+              ) : (
+                <>
+                  Already have an account?{' '}
+                  <button
+                    type="button"
+                    className="login-switch-mode-btn"
+                    onClick={() => {
+                      setIsRegistering(false);
+                      setError('');
+                      setSuccessMsg('');
+                    }}
+                  >
+                    Sign in
+                  </button>
+                </>
+              )}
+            </div>
+
+            {/* Demo Quick Accounts Bar */}
+            {!isRegistering && (
+              <div className="login-demo-bar">
+                <div className="login-demo-title">
+                  <Sparkles size={13} color="#6366f1" />
+                  <span>Demo Access (Click to Load)</span>
+                </div>
+                <div className="login-demo-chips">
+                  <button
+                    type="button"
+                    className={`login-demo-chip ${email === 'student.a@adaptive.edu' ? 'active-chip' : ''}`}
+                    onClick={() => setDemoAccount('student.a@adaptive.edu', 'student123', 'STUDENT')}
+                  >
+                    👤 Alice (Student)
+                  </button>
+                  <button
+                    type="button"
+                    className={`login-demo-chip ${email === 'student.b@adaptive.edu' ? 'active-chip' : ''}`}
+                    onClick={() => setDemoAccount('student.b@adaptive.edu', 'student123', 'STUDENT')}
+                  >
+                    👤 Bob (Student)
+                  </button>
+                  <button
+                    type="button"
+                    className={`login-demo-chip ${email === 'trainer@adaptive.edu' ? 'active-chip' : ''}`}
+                    onClick={() => setDemoAccount('trainer@adaptive.edu', 'trainer123', 'TRAINER')}
+                  >
+                    🎓 Dr. Turing (Trainer)
+                  </button>
+                </div>
+              </div>
             )}
           </div>
-        )}
+        </section>
+      </main>
 
-        {/* Error / Success Feedback */}
-        {error && (
-          <div
-            style={{
-              padding: '12px',
-              backgroundColor: '#fef2f2',
-              border: '1px solid #fecaca',
-              borderRadius: '8px',
-              color: '#991b1b',
-              fontSize: '13px',
-              marginBottom: '18px',
-            }}
-          >
-            {error}
-          </div>
-        )}
-        {successMsg && (
-          <div
-            style={{
-              padding: '12px',
-              backgroundColor: '#ecfdf5',
-              border: '1px solid #a7f3d0',
-              borderRadius: '8px',
-              color: '#065f46',
-              fontSize: '13px',
-              marginBottom: '18px',
-            }}
-          >
-            {successMsg}
-          </div>
-        )}
-
-        {/* Authentication Form */}
-        <form onSubmit={handleAuth} style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
-          {isRegistering && (
-            <div>
-              <label style={{ display: 'block', fontSize: '13px', fontWeight: 700, color: '#334155', marginBottom: '6px' }}>
-                Full Name
-              </label>
-              <input
-                type="text"
-                placeholder={activeRole === 'STUDENT' ? 'e.g. John Doe' : 'e.g. Prof. Jane Smith'}
-                value={name}
-                onChange={(e) => setName(e.target.value)}
-                required
-                style={{
-                  width: '100%',
-                  padding: '10px 12px',
-                  borderRadius: '8px',
-                  border: '1px solid #cbd5e1',
-                  fontSize: '14px',
-                  boxSizing: 'border-box',
-                }}
-              />
-            </div>
-          )}
-
-          <div>
-            <label style={{ display: 'block', fontSize: '13px', fontWeight: 700, color: '#334155', marginBottom: '6px' }}>
-              Email Address
-            </label>
-            <input
-              type="email"
-              value={email}
-              onChange={(e) => setEmail(e.target.value)}
-              required
-              style={{
-                width: '100%',
-                padding: '10px 12px',
-                borderRadius: '8px',
-                border: '1px solid #cbd5e1',
-                fontSize: '14px',
-                boxSizing: 'border-box',
-              }}
-            />
-          </div>
-
-          <div>
-            <label style={{ display: 'block', fontSize: '13px', fontWeight: 700, color: '#334155', marginBottom: '6px' }}>
-              Password
-            </label>
-            <input
-              type="password"
-              value={password}
-              onChange={(e) => setPassword(e.target.value)}
-              required
-              style={{
-                width: '100%',
-                padding: '10px 12px',
-                borderRadius: '8px',
-                border: '1px solid #cbd5e1',
-                fontSize: '14px',
-                boxSizing: 'border-box',
-              }}
-            />
-          </div>
-
-          {isRegistering && activeRole === 'STUDENT' && (
-            <div>
-              <label style={{ display: 'block', fontSize: '13px', fontWeight: 700, color: '#334155', marginBottom: '6px' }}>
-                Target Subject
-              </label>
-              <select
-                value={targetSubject}
-                onChange={(e) => setTargetSubject(e.target.value)}
-                style={{
-                  width: '100%',
-                  padding: '10px 12px',
-                  borderRadius: '8px',
-                  border: '1px solid #cbd5e1',
-                  fontSize: '14px',
-                  boxSizing: 'border-box',
-                  backgroundColor: '#ffffff',
-                }}
+      {/* Info Modals for Top Nav Links & Forgot Password */}
+      {activeModal && (
+        <div className="login-modal-backdrop" onClick={() => setActiveModal(null)}>
+          <div className="login-modal-box" onClick={(e) => e.stopPropagation()}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                <AdaptiveLogo size={28} />
+                <h3 style={{ margin: 0, fontSize: '18px', fontWeight: 800, color: '#0f172a' }}>
+                  {activeModal === 'features' && 'Platform Features'}
+                  {activeModal === 'about' && 'About AdaptIQ'}
+                  {activeModal === 'contact' && 'Academic Support'}
+                  {activeModal === 'forgot' && 'Reset Password'}
+                </h3>
+              </div>
+              <button
+                type="button"
+                onClick={() => setActiveModal(null)}
+                style={{ background: 'none', border: 'none', color: '#94a3b8', cursor: 'pointer', padding: '4px' }}
               >
-                <option value="Data Structures">Data Structures (Searching, Sorting, Linked Lists, Stack, Queue)</option>
-                <option value="Object Oriented Programming">Object Oriented Programming (Classes, Objects, Inheritance)</option>
-              </select>
+                <X size={20} />
+              </button>
             </div>
-          )}
 
-          {isRegistering && activeRole === 'TRAINER' && (
-            <div>
-              <label style={{ display: 'block', fontSize: '13px', fontWeight: 700, color: '#334155', marginBottom: '6px' }}>
-                Academic Department
-              </label>
-              <input
-                type="text"
-                value={department}
-                onChange={(e) => setDepartment(e.target.value)}
-                style={{
-                  width: '100%',
-                  padding: '10px 12px',
-                  borderRadius: '8px',
-                  border: '1px solid #cbd5e1',
-                  fontSize: '14px',
-                  boxSizing: 'border-box',
-                }}
-              />
-            </div>
-          )}
+            {activeModal === 'features' && (
+              <div style={{ fontSize: '14px', color: '#475569', lineHeight: 1.6 }}>
+                <p><strong>🎯 Bayesian Knowledge Tracing:</strong> Dynamically calculates concept mastery scores based on real-time question responses.</p>
+                <p><strong>⚡ Adaptive Question Generator:</strong> Adjusts difficulty based on your exact weak spots and prerequisite mastery.</p>
+                <p><strong>🔒 Verified Coding Sandbox:</strong> Executes code in isolated containers with full telemetry and automated integrity scoring.</p>
+              </div>
+            )}
 
-          <button
-            type="submit"
-            disabled={loading}
-            style={{
-              padding: '12px',
-              borderRadius: '8px',
-              backgroundColor: activeRole === 'STUDENT' ? '#4f46e5' : '#059669',
-              color: '#ffffff',
-              border: 'none',
-              fontWeight: 800,
-              fontSize: '14px',
-              cursor: loading ? 'not-allowed' : 'pointer',
-              marginTop: '6px',
-              boxShadow: activeRole === 'STUDENT' ? '0 4px 12px rgba(79, 70, 229, 0.25)' : '0 4px 12px rgba(5, 150, 105, 0.25)',
-              transition: 'background-color 0.2s',
-            }}
-          >
-            {loading
-              ? 'Authenticating...'
-              : isRegistering
-              ? `Register as ${activeRole === 'STUDENT' ? 'Student' : 'Teacher'}`
-              : `Sign In to ${activeRole === 'STUDENT' ? 'Student Portal' : 'Teacher Portal'}`}
-          </button>
-        </form>
-      </div>
+            {activeModal === 'about' && (
+              <div style={{ fontSize: '14px', color: '#475569', lineHeight: 1.6 }}>
+                <p><strong>AdaptIQ</strong> is an intelligent assessment and learning environment designed for university computer science cohorts.</p>
+                <p>Our mission is to help every student master core algorithms and programming skills through personalized, evidence-based feedback.</p>
+              </div>
+            )}
+
+            {activeModal === 'contact' && (
+              <div style={{ fontSize: '14px', color: '#475569', lineHeight: 1.6 }}>
+                <p>Need support or instructor credentials?</p>
+                <p>📧 Email: <a href="mailto:support@adaptiq.edu" style={{ color: '#4f46e5', fontWeight: 700 }}>support@adaptiq.edu</a></p>
+                <p>🏢 Campus Center: Turing Hall, Suite 402</p>
+                <p>For immediate testing, use the <strong>Demo Access</strong> buttons on the login card.</p>
+              </div>
+            )}
+
+            {activeModal === 'forgot' && (
+              <div style={{ fontSize: '14px', color: '#475569', lineHeight: 1.6 }}>
+                <p>For this academic prototype portal, password resets are handled via your department administrator or demo accounts.</p>
+                <p>Standard demo passwords are set to <code>student123</code> for students and <code>trainer123</code> for trainers.</p>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setPassword(activeRole === 'STUDENT' ? 'student123' : 'trainer123');
+                    setActiveModal(null);
+                  }}
+                  style={{
+                    marginTop: '12px',
+                    width: '100%',
+                    padding: '10px',
+                    borderRadius: '8px',
+                    border: 'none',
+                    backgroundColor: '#4f46e5',
+                    color: '#ffffff',
+                    fontWeight: 700,
+                    cursor: 'pointer'
+                  }}
+                >
+                  Autofill Default Password
+                </button>
+              </div>
+            )}
+          </div>
+        </div>
+      )}
     </div>
   );
 }

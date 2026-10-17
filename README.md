@@ -1,4 +1,4 @@
-# Adaptive Learning & Assessment Portal
+# AdaptIQ - Adaptive Learning & Assessment Platform
 
 A production-grade, AI-assisted platform that eliminates fixed learning sequences through Bayesian Knowledge Tracing, executes untrusted student code inside an isolated multi-mode sandbox, collects evidence-based integrity signals for human review without automated verdicts, and provides comprehensive curriculum management, cohort analytics, repository evaluation, and DevOps labs.
 

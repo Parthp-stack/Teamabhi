@@ -39,8 +39,10 @@ export const learningService = {
   },
 
   // Interactive Concept Graph for React Flow
-  async getConceptGraph(studentId = null) {
-    const params = studentId ? { student_id: studentId } : {};
+  async getConceptGraph(studentId = null, courseId = null) {
+    const params = {};
+    if (studentId) params.student_id = studentId;
+    if (courseId) params.course_id = courseId;
     const response = await api.get('/concepts/graph', { params });
     return response.data;
   },

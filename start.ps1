@@ -1,5 +1,5 @@
 Write-Host "========================================================" -ForegroundColor Cyan
-Write-Host "   Starting Adaptive Learning & Assessment Portal      " -ForegroundColor Cyan
+Write-Host "   Starting AdaptIQ - Adaptive Assessment Platform     " -ForegroundColor Cyan
 Write-Host "========================================================" -ForegroundColor Cyan
 
 Write-Host "`n[1/2] Starting Backend API on http://localhost:8000 ..." -ForegroundColor Green

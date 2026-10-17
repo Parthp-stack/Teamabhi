@@ -1,8 +1,8 @@
 {
-  "name": "adaptive-learning-portal",
+  "name": "adaptiq",
   "version": "1.0.0",
   "private": true,
-  "description": "Adaptive Learning & Assessment Portal with Bayesian Knowledge Tracing",
+  "description": "AdaptIQ - Adaptive Learning & Assessment Platform with Bayesian Knowledge Tracing",
   "scripts": {
     "dev": "npm --prefix frontend run dev",
     "start": "npm --prefix frontend run dev",

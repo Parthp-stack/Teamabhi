@@ -3,7 +3,7 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 from typing import Optional
 
 class Settings(BaseSettings):
-    PROJECT_NAME: str = "Adaptive Learning & Assessment Portal"
+    PROJECT_NAME: str = "AdaptIQ"
     VERSION: str = "1.0.0"
     API_V1_PREFIX: str = "/api"
 
