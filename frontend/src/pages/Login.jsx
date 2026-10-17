@@ -140,17 +140,34 @@ export default function Login() {
     }
   };
 
-  const handleApplyNewPasswordAndLogin = () => {
+  const handleApplyNewPasswordAndLogin = async () => {
     const finalEmail = resetVerifiedUser?.email || resetEmail.trim();
+    const finalPass = resetNewPassword;
+    const finalRole = resetVerifiedUser?.role || activeRole;
+
     setEmail(finalEmail);
-    setPassword(resetNewPassword);
-    if (resetVerifiedUser?.role) {
-      setActiveRole(resetVerifiedUser.role);
+    setPassword(finalPass);
+    if (finalRole) {
+      setActiveRole(finalRole);
     }
     setIsRegistering(false);
-    setError('');
-    setSuccessMsg('Password successfully updated in database! Click "Sign In" below to log in.');
     setActiveModal(null);
+    setLoading(true);
+    setError('');
+    setSuccessMsg('Signing in with your new password...');
+
+    try {
+      const data = await authService.login(finalEmail, finalPass);
+      if (data.user.role === 'TRAINER') {
+        navigate('/trainer/dashboard');
+      } else {
+        navigate('/student/dashboard');
+      }
+    } catch (err) {
+      setError(err.response?.data?.detail || 'Sign in failed with new password. Please try again.');
+    } finally {
+      setLoading(false);
+    }
   };
 
 
