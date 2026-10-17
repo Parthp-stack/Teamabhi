@@ -42,6 +42,23 @@ async def lifespan(app: FastAPI):
         migrate_adaptive()
         from backend.utils.migrate_assessments import run_assessment_migrations
         run_assessment_migrations()
+
+        # Ensure password_reset_otps columns in PostgreSQL and SQLite
+        from sqlalchemy import text
+        with engine.connect() as conn:
+            if engine.dialect.name == "postgresql":
+                conn.execute(text("ALTER TABLE password_reset_otps ADD COLUMN IF NOT EXISTS attempts INTEGER DEFAULT 0"))
+                conn.execute(text("ALTER TABLE password_reset_otps ADD COLUMN IF NOT EXISTS reset_token VARCHAR(64)"))
+                conn.execute(text("ALTER TABLE password_reset_otps ALTER COLUMN otp_code TYPE VARCHAR(64)"))
+                conn.commit()
+            elif engine.dialect.name == "sqlite":
+                res = conn.execute(text("PRAGMA table_info(password_reset_otps)")).fetchall()
+                col_names = [r[1] for r in res]
+                if "attempts" not in col_names:
+                    conn.execute(text("ALTER TABLE password_reset_otps ADD COLUMN attempts INTEGER DEFAULT 0"))
+                if "reset_token" not in col_names:
+                    conn.execute(text("ALTER TABLE password_reset_otps ADD COLUMN reset_token VARCHAR(64)"))
+                conn.commit()
     except Exception as e:
         logger.warning(f"Migration notice: {e}")
     

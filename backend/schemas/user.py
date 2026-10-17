@@ -47,10 +47,11 @@ class ForgotPasswordRequest(BaseModel):
     role: Optional[str] = None
 
 class ForgotPasswordResponse(BaseModel):
-    success: bool
+    success: bool = True
     message: str
     email: str
     role: Optional[str] = None
+    demo_otp: Optional[str] = None
     reset_link: Optional[str] = None
 
 class VerifyResetTokenResponse(BaseModel):
@@ -64,11 +65,17 @@ class VerifyOTPRequest(BaseModel):
     otp: str
     role: Optional[str] = None
 
+VerifyResetOTPRequest = VerifyOTPRequest
+
 class VerifyOTPResponse(BaseModel):
-    success: bool
-    message: str
+    verified: bool = True
+    success: bool = True
+    message: str = "OTP verified successfully"
     email: str
     role: Optional[str] = None
+    reset_token: Optional[str] = None
+
+VerifyResetOTPResponse = VerifyOTPResponse
 
 class ResetPasswordRequest(BaseModel):
     token: Optional[str] = None

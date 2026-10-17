@@ -47,6 +47,20 @@ export const authService = {
     return response.data;
   },
 
+  async generateDemoOtp(email, role = null) {
+    const payload = { email };
+    if (role) payload.role = role;
+    const response = await api.post('/auth/forgot-password', payload);
+    return response.data;
+  },
+
+  async verifyResetOtp(email, otp, role = null) {
+    const payload = { email, otp };
+    if (role) payload.role = role;
+    const response = await api.post('/auth/verify-reset-otp', payload);
+    return response.data;
+  },
+
   async verifyResetToken(token) {
     const response = await api.get(`/auth/verify-reset-token?token=${encodeURIComponent(token)}`);
     return response.data;

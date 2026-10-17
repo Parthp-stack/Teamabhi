@@ -18,7 +18,10 @@ import {
   CheckCircle2,
   X,
   HelpCircle,
-  Info
+  Info,
+  KeyRound,
+  ShieldCheck,
+  RefreshCw
 } from 'lucide-react';
 import './Login.css';
 import AdaptiveLogo from '../components/AdaptiveLogo';
@@ -47,25 +50,35 @@ export default function Login() {
   // Info Modal states for top nav
   const [activeModal, setActiveModal] = useState(null); // 'features' | 'about' | 'contact' | 'forgot' | null
 
-  // Forgot Password flow states (Link-based, NO OTP)
+  // Forgot Password flow states (Demo / Hackathon OTP Flow)
+  const [resetStep, setResetStep] = useState(1); // 1: Email, 2: Verify OTP, 3: Create New Password, 4: Success
   const [resetEmail, setResetEmail] = useState('');
+  const [demoOtp, setDemoOtp] = useState('');
+  const [enteredOtp, setEnteredOtp] = useState('');
+  const [resetNewPassword, setResetNewPassword] = useState('');
+  const [resetConfirmPassword, setResetConfirmPassword] = useState('');
+  const [resetShowNewPassword, setResetShowNewPassword] = useState(false);
+  const [resetShowConfirmPassword, setResetShowConfirmPassword] = useState(false);
   const [resetLoading, setResetLoading] = useState(false);
   const [resetError, setResetError] = useState('');
   const [resetSuccess, setResetSuccess] = useState('');
-  const [resetLinkSent, setResetLinkSent] = useState(false);
-  const [resetDevLink, setResetDevLink] = useState(null);
+  const [resetToken, setResetToken] = useState(null);
 
   const handleOpenForgotModal = () => {
+    setResetStep(1);
     setResetEmail(email || '');
+    setDemoOtp('');
+    setEnteredOtp('');
+    setResetNewPassword('');
+    setResetConfirmPassword('');
     setResetLoading(false);
     setResetError('');
     setResetSuccess('');
-    setResetLinkSent(false);
-    setResetDevLink(null);
+    setResetToken(null);
     setActiveModal('forgot');
   };
 
-  const handleSendResetLink = async (e) => {
+  const handleGenerateDemoOtp = async (e) => {
     if (e) e.preventDefault();
     const cleanInput = resetEmail.trim();
     if (!cleanInput) {
@@ -76,15 +89,13 @@ export default function Login() {
     setResetError('');
     setResetSuccess('');
     try {
-      const data = await authService.forgotPassword(cleanInput, activeRole);
-      if (data && data.success) {
-        setResetLinkSent(true);
-        setResetSuccess(data.message || 'Password reset link sent to your email.');
-        if (data.reset_link) {
-          setResetDevLink(data.reset_link);
-        }
+      const data = await authService.generateDemoOtp(cleanInput, activeRole);
+      if (data && data.demo_otp) {
+        setDemoOtp(data.demo_otp);
+        setEnteredOtp('');
+        setResetStep(2);
       } else {
-        setResetError('Email not found');
+        setResetError(data?.message || 'Email not found');
       }
     } catch (err) {
       const msg = err.response?.data?.detail;
@@ -98,6 +109,78 @@ export default function Login() {
     } finally {
       setResetLoading(false);
     }
+  };
+
+  const handleVerifyOtp = async (e) => {
+    if (e) e.preventDefault();
+    const cleanOtp = enteredOtp.trim();
+    if (!cleanOtp) {
+      setResetError('Please enter the 6-digit OTP.');
+      return;
+    }
+    setResetLoading(true);
+    setResetError('');
+    try {
+      const data = await authService.verifyResetOtp(resetEmail.trim(), cleanOtp, activeRole);
+      if (data && data.verified) {
+        if (data.reset_token) {
+          setResetToken(data.reset_token);
+        }
+        setResetStep(3);
+      } else {
+        setResetError('Invalid OTP.');
+      }
+    } catch (err) {
+      const msg = err.response?.data?.detail;
+      setResetError(msg || 'Invalid OTP.');
+    } finally {
+      setResetLoading(false);
+    }
+  };
+
+  const handleResetPasswordSubmit = async (e) => {
+    if (e) e.preventDefault();
+    setResetError('');
+
+    if (!resetNewPassword || resetNewPassword.length < 6) {
+      setResetError('New password must be at least 6 characters long.');
+      return;
+    }
+
+    if (resetNewPassword !== resetConfirmPassword) {
+      setResetError('Passwords do not match. Please re-enter.');
+      return;
+    }
+
+    setResetLoading(true);
+    try {
+      const data = await authService.resetPassword({
+        email: resetEmail.trim(),
+        new_password: resetNewPassword,
+        confirm_password: resetConfirmPassword,
+        otp: enteredOtp.trim(),
+        token: resetToken,
+        role: activeRole
+      });
+
+      if (data && data.success) {
+        setResetStep(4);
+      } else {
+        setResetError(data?.message || 'Password reset failed. Please try again.');
+      }
+    } catch (err) {
+      const msg = err.response?.data?.detail;
+      setResetError(msg || 'Password reset failed. Please try again.');
+    } finally {
+      setResetLoading(false);
+    }
+  };
+
+  const handleSuccessLogin = () => {
+    setEmail(resetEmail.trim());
+    setPassword(resetNewPassword);
+    setActiveModal(null);
+    setSuccessMsg('Password changed successfully! You can now sign in with your new password.');
   };
 
 
@@ -577,10 +660,32 @@ export default function Login() {
 
             {activeModal === 'forgot' && (
               <div className="forgot-modal-content">
-                {!resetLinkSent ? (
-                  <form onSubmit={handleSendResetLink}>
+                {/* Steps Navigation Bar */}
+                <div className="forgot-steps-bar" style={{ marginBottom: '18px' }}>
+                  <div className={`forgot-step-chip ${resetStep === 1 ? 'active' : ''}`}>
+                    <span className="forgot-step-num">1</span>
+                    <span>Email</span>
+                  </div>
+                  <div className="forgot-step-line" />
+                  <div className={`forgot-step-chip ${resetStep === 2 ? 'active' : ''}`}>
+                    <span className="forgot-step-num">2</span>
+                    <span>Verify OTP</span>
+                  </div>
+                  <div className="forgot-step-line" />
+                  <div className={`forgot-step-chip ${resetStep === 3 ? 'active' : ''}`}>
+                    <span className="forgot-step-num">3</span>
+                    <span>New Password</span>
+                  </div>
+                </div>
+
+                {/* Step 1: Enter Email */}
+                {resetStep === 1 && (
+                  <form onSubmit={handleGenerateDemoOtp}>
+                    <h4 style={{ margin: '0 0 6px 0', fontSize: '18px', fontWeight: 800, color: '#0f172a' }}>
+                      Forgot Password
+                    </h4>
                     <p style={{ fontSize: '13.5px', color: '#64748b', margin: '0 0 16px 0', lineHeight: 1.5 }}>
-                      Enter your registered email address for your <strong>{activeRole === 'STUDENT' ? 'Student' : 'Trainer'}</strong> account. We will send you a secure link to reset your password.
+                      Enter your registered email for your <strong>{activeRole === 'STUDENT' ? 'Student' : 'Trainer'}</strong> account.
                     </p>
 
                     {resetError && (
@@ -591,7 +696,7 @@ export default function Login() {
                     )}
 
                     <div className="login-form-group">
-                      <label className="login-form-label">Email Address</label>
+                      <label className="login-form-label">Email</label>
                       <div className="login-input-wrapper">
                         <Mail size={18} className="login-input-icon" />
                         <input
@@ -615,7 +720,7 @@ export default function Login() {
                         <button
                           type="button"
                           className="login-demo-chip"
-                          onClick={() => setResetEmail('student.a@adaptive.edu')}
+                          onClick={() => { setResetEmail('student.a@adaptive.edu'); setActiveRole('STUDENT'); }}
                           style={{ fontSize: '11.5px', padding: '4px 10px' }}
                         >
                           👤 student.a@adaptive.edu
@@ -623,7 +728,7 @@ export default function Login() {
                         <button
                           type="button"
                           className="login-demo-chip"
-                          onClick={() => setResetEmail('student.b@adaptive.edu')}
+                          onClick={() => { setResetEmail('student.b@adaptive.edu'); setActiveRole('STUDENT'); }}
                           style={{ fontSize: '11.5px', padding: '4px 10px' }}
                         >
                           👤 student.b@adaptive.edu
@@ -631,7 +736,7 @@ export default function Login() {
                         <button
                           type="button"
                           className="login-demo-chip"
-                          onClick={() => setResetEmail('trainer@adaptive.edu')}
+                          onClick={() => { setResetEmail('trainer@adaptive.edu'); setActiveRole('TRAINER'); }}
                           style={{ fontSize: '11.5px', padding: '4px 10px' }}
                         >
                           🎓 trainer@adaptive.edu
@@ -645,15 +750,218 @@ export default function Login() {
                       className="login-submit-btn"
                       style={{ marginTop: '4px', width: '100%' }}
                     >
-                      <span>{resetLoading ? 'Sending Reset Link...' : 'Send Reset Link'}</span>
+                      <span>{resetLoading ? 'Generating Demo OTP...' : 'Generate OTP'}</span>
                       {!resetLoading && <ArrowRight size={18} />}
                     </button>
                   </form>
-                ) : (
+                )}
+
+                {/* Step 2: Verify OTP */}
+                {resetStep === 2 && (
+                  <form onSubmit={handleVerifyOtp}>
+                    <h4 style={{ margin: '0 0 6px 0', fontSize: '18px', fontWeight: 800, color: '#0f172a' }}>
+                      Verify OTP
+                    </h4>
+
+                    {/* Prominent Demo OTP Display */}
+                    <div style={{
+                      background: 'linear-gradient(135deg, #f8fafc 0%, #eff6ff 100%)',
+                      border: '2px dashed #6366f1',
+                      borderRadius: '12px',
+                      padding: '16px',
+                      marginBottom: '16px',
+                      textAlign: 'center'
+                    }}>
+                      <div style={{ fontSize: '11px', fontWeight: 800, color: '#4f46e5', letterSpacing: '1.5px', textTransform: 'uppercase', marginBottom: '4px' }}>
+                        DEMO OTP
+                      </div>
+                      <div style={{
+                        fontSize: '32px',
+                        fontWeight: 900,
+                        letterSpacing: '8px',
+                        color: '#1e1b4b',
+                        fontFamily: 'monospace',
+                        margin: '6px 0'
+                      }}>
+                        {demoOtp}
+                      </div>
+                      <div style={{ fontSize: '12.5px', color: '#4338ca', fontWeight: 700 }}>
+                        Use this OTP to continue.
+                      </div>
+                      <div style={{ marginTop: '8px', fontSize: '11px', color: '#64748b' }}>
+                        Demo mode — OTP is displayed here for testing.
+                      </div>
+                    </div>
+
+                    {resetError && (
+                      <div className="login-alert login-alert-error" style={{ marginBottom: '14px' }}>
+                        <AlertCircle size={16} />
+                        <span>{resetError}</span>
+                      </div>
+                    )}
+
+                    <div className="login-form-group">
+                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '6px' }}>
+                        <label className="login-form-label" style={{ margin: 0 }}>Enter OTP:</label>
+                        <button
+                          type="button"
+                          onClick={() => setEnteredOtp(demoOtp)}
+                          style={{
+                            background: '#e0e7ff',
+                            border: '1px solid #c7d2fe',
+                            borderRadius: '4px',
+                            color: '#4338ca',
+                            fontSize: '11px',
+                            fontWeight: 700,
+                            cursor: 'pointer',
+                            padding: '2px 8px'
+                          }}
+                        >
+                          Auto-fill Demo OTP
+                        </button>
+                      </div>
+                      <div className="login-input-wrapper">
+                        <KeyRound size={18} className="login-input-icon" />
+                        <input
+                          type="text"
+                          maxLength={6}
+                          placeholder="000000"
+                          value={enteredOtp}
+                          onChange={(e) => setEnteredOtp(e.target.value.replace(/\D/g, ''))}
+                          required
+                          className="login-input-field"
+                          style={{ letterSpacing: '6px', fontSize: '18px', fontWeight: 700, textAlign: 'center' }}
+                          autoFocus
+                        />
+                      </div>
+                    </div>
+
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', marginTop: '14px' }}>
+                      <button
+                        type="submit"
+                        disabled={resetLoading}
+                        className="login-submit-btn"
+                        style={{ width: '100%' }}
+                      >
+                        <span>{resetLoading ? 'Verifying OTP...' : 'Verify OTP'}</span>
+                        {!resetLoading && <ArrowRight size={18} />}
+                      </button>
+
+                      <button
+                        type="button"
+                        disabled={resetLoading}
+                        onClick={handleGenerateDemoOtp}
+                        className="login-demo-chip"
+                        style={{
+                          width: '100%',
+                          justifyContent: 'center',
+                          padding: '10px',
+                          fontSize: '13px',
+                          fontWeight: 700,
+                          background: '#f1f5f9',
+                          border: '1px solid #cbd5e1',
+                          color: '#334155'
+                        }}
+                      >
+                        <RefreshCw size={14} style={{ marginRight: '6px' }} />
+                        Generate New OTP
+                      </button>
+                    </div>
+
+                    <div style={{ textAlign: 'center', marginTop: '12px' }}>
+                      <button
+                        type="button"
+                        onClick={() => { setResetStep(1); setResetError(''); }}
+                        style={{ background: 'none', border: 'none', color: '#64748b', fontSize: '12.5px', cursor: 'pointer' }}
+                      >
+                        ← Change email address
+                      </button>
+                    </div>
+                  </form>
+                )}
+
+                {/* Step 3: Create New Password */}
+                {resetStep === 3 && (
+                  <form onSubmit={handleResetPasswordSubmit}>
+                    <h4 style={{ margin: '0 0 6px 0', fontSize: '18px', fontWeight: 800, color: '#0f172a' }}>
+                      Create New Password
+                    </h4>
+                    <p style={{ fontSize: '13.5px', color: '#64748b', margin: '0 0 16px 0', lineHeight: 1.5 }}>
+                      Enter and confirm your new password for <strong>{resetEmail}</strong>.
+                    </p>
+
+                    {resetError && (
+                      <div className="login-alert login-alert-error" style={{ marginBottom: '14px' }}>
+                        <AlertCircle size={16} />
+                        <span>{resetError}</span>
+                      </div>
+                    )}
+
+                    <div className="login-form-group">
+                      <label className="login-form-label">New Password</label>
+                      <div className="login-input-wrapper">
+                        <Lock size={18} className="login-input-icon" />
+                        <input
+                          type={resetShowNewPassword ? 'text' : 'password'}
+                          placeholder="At least 6 characters"
+                          value={resetNewPassword}
+                          onChange={(e) => setResetNewPassword(e.target.value)}
+                          required
+                          className="login-input-field"
+                          autoFocus
+                        />
+                        <button
+                          type="button"
+                          className="login-password-toggle"
+                          onClick={() => setResetShowNewPassword(!resetShowNewPassword)}
+                          tabIndex="-1"
+                        >
+                          {resetShowNewPassword ? <EyeOff size={18} /> : <Eye size={18} />}
+                        </button>
+                      </div>
+                    </div>
+
+                    <div className="login-form-group">
+                      <label className="login-form-label">Confirm Password</label>
+                      <div className="login-input-wrapper">
+                        <Lock size={18} className="login-input-icon" />
+                        <input
+                          type={resetShowConfirmPassword ? 'text' : 'password'}
+                          placeholder="Re-enter new password"
+                          value={resetConfirmPassword}
+                          onChange={(e) => setResetConfirmPassword(e.target.value)}
+                          required
+                          className="login-input-field"
+                        />
+                        <button
+                          type="button"
+                          className="login-password-toggle"
+                          onClick={() => setResetShowConfirmPassword(!resetShowConfirmPassword)}
+                          tabIndex="-1"
+                        >
+                          {resetShowConfirmPassword ? <EyeOff size={18} /> : <Eye size={18} />}
+                        </button>
+                      </div>
+                    </div>
+
+                    <button
+                      type="submit"
+                      disabled={resetLoading}
+                      className="login-submit-btn"
+                      style={{ marginTop: '8px', width: '100%' }}
+                    >
+                      <span>{resetLoading ? 'Updating Password...' : 'Reset Password'}</span>
+                      {!resetLoading && <CheckCircle2 size={18} />}
+                    </button>
+                  </form>
+                )}
+
+                {/* Success: Password Changed Successfully */}
+                {resetStep === 4 && (
                   <div style={{ textAlign: 'center', padding: '12px 0 6px 0' }}>
                     <div style={{
-                      width: '56px',
-                      height: '56px',
+                      width: '60px',
+                      height: '60px',
                       borderRadius: '50%',
                       background: '#ecfdf5',
                       color: '#059669',
@@ -663,83 +971,27 @@ export default function Login() {
                       margin: '0 auto 16px auto',
                       border: '2px solid #a7f3d0'
                     }}>
-                      <CheckCircle2 size={32} />
+                      <CheckCircle2 size={36} />
                     </div>
-                    <h4 style={{ margin: '0 0 8px 0', fontSize: '18px', fontWeight: 800, color: '#0f172a' }}>
-                      Reset Link Sent!
+                    <h4 style={{ margin: '0 0 8px 0', fontSize: '20px', fontWeight: 800, color: '#0f172a' }}>
+                      Password Changed Successfully
                     </h4>
-                    <p style={{ fontSize: '13.5px', color: '#475569', margin: '0 0 16px 0', lineHeight: 1.5 }}>
-                      We have sent a secure password reset link to <strong>{resetEmail}</strong>.<br />
-                      Please check your inbox and click the link to choose a new password. The link expires in <strong>15 minutes</strong>.
+                    <p style={{ fontSize: '14px', color: '#475569', margin: '0 0 20px 0', lineHeight: 1.5 }}>
+                      Your password has been updated.
                     </p>
-
-                    {resetDevLink && (
-                      <div style={{
-                        background: '#f8fafc',
-                        border: '1px dashed #cbd5e1',
-                        borderRadius: '8px',
-                        padding: '12px',
-                        marginBottom: '16px',
-                        textAlign: 'left'
-                      }}>
-                        <div style={{ fontSize: '12px', fontWeight: 700, color: '#4f46e5', marginBottom: '6px' }}>
-                          💡 Direct Link (Dev / Testing Mode):
-                        </div>
-                        <button
-                          type="button"
-                          onClick={() => {
-                            setActiveModal(null);
-                            const url = new URL(resetDevLink, window.location.origin);
-                            navigate(`${url.pathname}${url.search}`);
-                          }}
-                          style={{
-                            background: '#e0e7ff',
-                            color: '#4338ca',
-                            border: '1px solid #c7d2fe',
-                            borderRadius: '6px',
-                            padding: '6px 12px',
-                            fontSize: '12px',
-                            fontWeight: 700,
-                            cursor: 'pointer',
-                            display: 'inline-flex',
-                            alignItems: 'center',
-                            gap: '4px'
-                          }}
-                        >
-                          Open Reset Password Page <ArrowRight size={14} />
-                        </button>
-                      </div>
-                    )}
-
                     <button
                       type="button"
-                      onClick={() => setActiveModal(null)}
+                      onClick={handleSuccessLogin}
                       className="login-submit-btn"
-                      style={{ width: '100%', marginBottom: '10px' }}
+                      style={{ width: '100%' }}
                     >
-                      <span>Close</span>
-                    </button>
-
-                    <button
-                      type="button"
-                      onClick={() => {
-                        setResetLinkSent(false);
-                        setResetError('');
-                      }}
-                      style={{
-                        background: 'none',
-                        border: 'none',
-                        color: '#64748b',
-                        fontSize: '13px',
-                        cursor: 'pointer',
-                        padding: '4px 0'
-                      }}
-                    >
-                      ← Send to a different email address
+                      <span>Login</span>
+                      <ArrowRight size={18} />
                     </button>
                   </div>
                 )}
               </div>
+
             )}
           </div>
         </div>

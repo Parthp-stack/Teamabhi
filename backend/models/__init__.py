@@ -10,7 +10,7 @@ from backend.models.integrity import IntegritySignal, IntegrityEvent
 from backend.models.explanation import ExplanationQuestion, ExplanationAnswer
 from backend.models.ai_evaluation import AIEvaluation
 from backend.models.assessment_attempt import AssessmentAttempt, AssessmentWarning, QuestionAttempt, StudentConceptProgress
-from backend.models.password_reset import PasswordResetToken
+from backend.models.password_reset import PasswordResetToken, PasswordResetOTP
 
 # Entity aliases for database and curriculum flexibility
 Subject = Course
@@ -52,7 +52,8 @@ __all__ = [
     "AssessmentAttempt",
     "AssessmentWarning",
     "StudentConceptProgress",
-    "PasswordResetToken"
+    "PasswordResetToken",
+    "PasswordResetOTP"
 ]
 
 
